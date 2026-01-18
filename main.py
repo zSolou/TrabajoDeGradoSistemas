@@ -1,12 +1,16 @@
-# main.py
+# main.py (ajuste)
 import sys
 from PySide6 import QtWidgets
 from screens.login import LoginScreen
 from screens.main_screen import MainScreen
 import core.repo as repo
+from core.theme import ThemeManager
 
 def main():
     app = QtWidgets.QApplication(sys.argv)
+
+    # Aplicar tema desde el inicio (unificado)
+    ThemeManager(app)
 
     # Crear la pantalla de login
     login = LoginScreen()

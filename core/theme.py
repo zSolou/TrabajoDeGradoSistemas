@@ -2,6 +2,7 @@
 from PySide6 import QtWidgets
 from PySide6.QtCore import QSettings
 from core.styles import DARK_THEME, LIGHT_THEME
+from typing import Optional
 
 class ThemeManager:
     """
@@ -13,8 +14,7 @@ class ThemeManager:
     THEME_DARK = "dark"
     THEME_LIGHT = "light"
 
-    def __init__(self, app: 'QtWidgets.QApplication' | None = None):
-        # Obtiene la instancia de la app si no se le pasa explícitamente
+    def __init__(self, app: Optional[QtWidgets.QApplication] = None) -> None:
         self.app = app or QtWidgets.QApplication.instance()
         self._theme = self._load_theme()
         self._apply(self._theme)
@@ -39,12 +39,9 @@ class ThemeManager:
     def _apply(self, theme: str):
         if not self.app:
             return
-        if theme == self.THEME_DARK:
-            self.app.setStyleSheet(DARK_THEME)
-        else:
-            self.app.setStyleSheet(LIGHT_THEME)
+        self.app.setStyleSheet(DARK_THEME if theme == self.THEME_DARK else LIGHT_THEME)
 
-    def apply_theme(self, theme: str | None = None):
+    def apply_theme(self, theme: Optional[str] = None) -> None:
         if theme is None:
             theme = self._theme
         if theme not in (self.THEME_DARK, self.THEME_LIGHT):
@@ -53,6 +50,6 @@ class ThemeManager:
         self._apply(theme)
         self._save_theme(theme)
 
-    def toggle_theme(self):
+    def toggle_theme(self) -> None:
         new_theme = self.THEME_LIGHT if self._theme == self.THEME_DARK else self.THEME_DARK
         self.apply_theme(new_theme)
