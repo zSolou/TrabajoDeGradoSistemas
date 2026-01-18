@@ -2,7 +2,7 @@
 from PySide6 import QtWidgets
 from screens.login import LoginScreen
 from screens.main_screen import MainScreen
-from core.styles import DARK_THEME, LIGHT_THEME
+from core.theme import ThemeManager
 
 class MainApp(QtWidgets.QMainWindow):
     def __init__(self):
@@ -10,9 +10,8 @@ class MainApp(QtWidgets.QMainWindow):
         self.setWindowTitle("Sistema - Servicios y Astillidos del Sur")
         self.resize(1000, 600)
 
-        # estado de tema: True = dark, False = light
-        self._dark_mode = True
-        self.setStyleSheet(DARK_THEME)
+        # Gestor de tema central (aplica a toda la app)
+        self.theme_manager = ThemeManager()
 
         self.stack = QtWidgets.QStackedWidget()
         self.setCentralWidget(self.stack)
@@ -32,10 +31,5 @@ class MainApp(QtWidgets.QMainWindow):
         self.stack.setCurrentWidget(self.main)
 
     def toggle_theme(self):
-        """Alterna entre tema oscuro y claro."""
-        if self._dark_mode:
-            self.setStyleSheet(LIGHT_THEME)
-            self._dark_mode = False
-        else:
-            self.setStyleSheet(DARK_THEME)
-            self._dark_mode = True
+        """Delega el cambio de tema al ThemeManager."""
+        self.theme_manager.toggle_theme()
