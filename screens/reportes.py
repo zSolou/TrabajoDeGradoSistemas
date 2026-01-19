@@ -2,6 +2,7 @@
 from PySide6 import QtCore, QtWidgets
 from datetime import date, timedelta
 import sys
+import math
 
 # Intentar cargar matplotlib para la gráfica (pie chart)
 try:
@@ -129,8 +130,10 @@ class ReportesScreen(QtWidgets.QWidget):
             end = date.today()
             start = end - timedelta(days=30)
         elif date_filter == "Personalizado":
-            start = self.start_date.date().toPyDate()
-            end = self.end_date.date().toPyDate()
+            start_qd = self.start_date.date()
+            end_qd = self.end_date.date()
+            start = date(start_qd.year(), start_qd.month(), start_qd.day())
+            end = date(end_qd.year(), end_qd.month(), end_qd.day())
 
         filtered = []
         for r in self.all_rows:
@@ -196,18 +199,40 @@ class ReportesScreen(QtWidgets.QWidget):
     def _draw_chart(self, data_by_type):
         if not MATPLOTLIB_AVAILABLE:
             return
+
+        # Si no hay datos, mostrar mensaje
+        labels = list(data_by_type.keys())
+        values = [data_by_type[k] for k in labels]
+        total = sum(values)
+
         self.figure.clear()
         ax = self.figure.add_subplot(111)
 
-        labels = [k for k in data_by_type.keys() if data_by_type[k] is not None]
-        values = [data_by_type[k] for k in data_by_type.keys() if data_by_type[k] is not None]
-
-        if not values or sum(values) == 0:
+        if total <= 0 or all(v == 0 for v in values):
             ax.text(0.5, 0.5, "Sin datos para mostrar", transform=ax.transAxes,
                     horizontalalignment="center", verticalalignment="center")
+            ax.axis('off')
         else:
             colors = ['#4e79a7', '#f28e2b', '#e15759', '#76b7b2']
-            ax.pie(values, labels=labels, autopct='%1.1f%%', startangle=90, colors=colors)
+            wedges, _ = ax.pie(values, labels=None, autopct=None, startangle=90, colors=colors)
+
+            # Dibujar etiquetas dentro de las porciones
+            for i, w in enumerate(wedges):
+                theta = (w.theta2 + w.theta1) / 2.0
+                x = math.cos(math.radians(theta)) * 0.55
+                y = math.sin(math.radians(theta)) * 0.55
+                percent = (values[i] / total) * 100 if total > 0 else 0
+                label_text = f"{labels[i]} {percent:.1f}%"
+                ax.text(x, y, label_text, ha="center", va="center",
+                        fontsize=9, color="#e6eef8" )
+
             ax.axis('equal')
         if MATPLOTLIB_AVAILABLE and hasattr(self, "canvas"):
             self.canvas.draw()
+
+    def _add_table_row(self, values):
+        r = self.table.rowCount()
+        self.table.insertRow(r)
+        for i, v in enumerate(values):
+            item = QtWidgets.QTableWidgetItem("" if v is None else str(v))
+            self.table.setItem(r, i, item)
