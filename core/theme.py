@@ -7,7 +7,7 @@ from core.styles import DARK_THEME, LIGHT_THEME
 
 class ThemeManager:
     """
-    Centraliza el manejo de tema (oscuro/claro) para la app PySide6.
+    Centraliza el manejo de tema (Oscuro/Claro) para la app PySide6.
     Aplica el tema a toda la aplicación mediante QApplication.setStyleSheet.
     Persistencia de preferencia usando QSettings.
     """
@@ -22,7 +22,7 @@ class ThemeManager:
     ) -> None:
         self.app = app or QtWidgets.QApplication.instance()
 
-        # Si se pasa un tema por defecto, úsalo y persístalo; de lo contrario, carga del store.
+        # If a default theme is provided, use it and persist it; otherwise load from store.
         if default_theme in (self.THEME_DARK, self.THEME_LIGHT):
             self._theme = default_theme
             self._save_theme(self._theme)
@@ -65,3 +65,11 @@ class ThemeManager:
     def toggle_theme(self) -> None:
         new_theme = self.THEME_LIGHT if self._theme == self.THEME_DARK else self.THEME_DARK
         self.apply_theme(new_theme)
+
+    @property
+    def current_theme(self) -> str:
+        """
+        Propiedad pública para obtener el tema actual ('dark' | 'light').
+        Útil para mostrar en la UI el estado actual.
+        """
+        return self._theme
