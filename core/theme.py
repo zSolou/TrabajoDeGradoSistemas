@@ -1,8 +1,9 @@
 # core/theme.py
+from typing import Optional
 from PySide6 import QtWidgets
 from PySide6.QtCore import QSettings
 from core.styles import DARK_THEME, LIGHT_THEME
-from typing import Optional
+
 
 class ThemeManager:
     """
@@ -14,14 +15,26 @@ class ThemeManager:
     THEME_DARK = "dark"
     THEME_LIGHT = "light"
 
-    def __init__(self, app: Optional[QtWidgets.QApplication] = None) -> None:
+    def __init__(
+        self,
+        app: Optional[QtWidgets.QApplication] = None,
+        default_theme: Optional[str] = None
+    ) -> None:
         self.app = app or QtWidgets.QApplication.instance()
-        self._theme = self._load_theme()
+
+        # Si se pasa un tema por defecto, úsalo y persístalo; de lo contrario, carga del store.
+        if default_theme in (self.THEME_DARK, self.THEME_LIGHT):
+            self._theme = default_theme
+            self._save_theme(self._theme)
+        else:
+            self._theme = self._load_theme()
+
         self._apply(self._theme)
 
     def _load_theme(self) -> str:
         try:
-            settings = QSettings("TesisSistemas", "OpenCode")
+            # Ajusta el nombre de la organización/app según tu proyecto
+            settings = QSettings("TrabajoDeGradoSistemas", "OpenCode")
             t = settings.value(self.THEME_KEY, self.THEME_DARK)
             if isinstance(t, str) and t in (self.THEME_DARK, self.THEME_LIGHT):
                 return t
@@ -29,14 +42,14 @@ class ThemeManager:
             pass
         return self.THEME_DARK
 
-    def _save_theme(self, theme: str):
+    def _save_theme(self, theme: str) -> None:
         try:
-            settings = QSettings("TesisSistemas", "OpenCode")
+            settings = QSettings("TrabajoDeGradoSistemas", "OpenCode")
             settings.setValue(self.THEME_KEY, theme)
         except Exception:
             pass
 
-    def _apply(self, theme: str):
+    def _apply(self, theme: str) -> None:
         if not self.app:
             return
         self.app.setStyleSheet(DARK_THEME if theme == self.THEME_DARK else LIGHT_THEME)
