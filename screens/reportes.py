@@ -200,39 +200,31 @@ class ReportesScreen(QtWidgets.QWidget):
         if not MATPLOTLIB_AVAILABLE:
             return
 
-        # Si no hay datos, mostrar mensaje
-        labels = list(data_by_type.keys())
-        values = [data_by_type[k] for k in labels]
-        total = sum(values)
-
+        # Filtrar solo valores > 0
+        items = [(k, v) for k, v in data_by_type.items() if v is not None and v > 0]
         self.figure.clear()
         ax = self.figure.add_subplot(111)
 
-        if total <= 0 or all(v == 0 for v in values):
+        if not items:
             ax.text(0.5, 0.5, "Sin datos para mostrar", transform=ax.transAxes,
                     horizontalalignment="center", verticalalignment="center")
             ax.axis('off')
         else:
-            colors = ['#4e79a7', '#f28e2b', '#e15759', '#76b7b2']
-            wedges, _ = ax.pie(values, labels=None, autopct=None, startangle=90, colors=colors)
+            labels, values = zip(*items)
+            total = sum(values)
+            colors = ['#4e79a7', '#f28e2b', '#e15759', '#76b7b2'][:len(values)]
+            wedges, _ = ax.pie(values, labels=None, startangle=90, colors=colors)
 
-            # Dibujar etiquetas dentro de las porciones
+            # Etiquetas dentro de cada porción
             for i, w in enumerate(wedges):
                 theta = (w.theta2 + w.theta1) / 2.0
-                x = math.cos(math.radians(theta)) * 0.55
-                y = math.sin(math.radians(theta)) * 0.55
+                x = math.cos(math.radians(theta)) * 0.6
+                y = math.sin(math.radians(theta)) * 0.6
                 percent = (values[i] / total) * 100 if total > 0 else 0
                 label_text = f"{labels[i]} {percent:.1f}%"
-                ax.text(x, y, label_text, ha="center", va="center",
-                        fontsize=9, color="#e6eef8" )
+                ax.text(x, y, label_text, fontsize=9, color="#e6eef8",
+                        ha="center", va="center")
 
             ax.axis('equal')
         if MATPLOTLIB_AVAILABLE and hasattr(self, "canvas"):
             self.canvas.draw()
-
-    def _add_table_row(self, values):
-        r = self.table.rowCount()
-        self.table.insertRow(r)
-        for i, v in enumerate(values):
-            item = QtWidgets.QTableWidgetItem("" if v is None else str(v))
-            self.table.setItem(r, i, item)
