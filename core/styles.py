@@ -36,6 +36,25 @@ QPushButton:disabled {
     color: #cbd5e1;
 }
 QLabel { color: #e6eef8; }
+
+QTableWidget {
+    background-color: #0b1220;
+    color: #e6eef8;
+    gridline-color: rgba(255, 255, 255, 0.25);
+}
+QTableWidget::item {
+    color: #e6eef8;
+}
+QTableWidget::item:selected {
+    background-color: #1f2a40;
+    color: #e6eef8;
+}
+QHeaderView::section {
+    background-color: #0b1220;
+    color: #e6eef8;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    padding: 4px;
+}
 """
 
 # Tema claro estilo Windows 11

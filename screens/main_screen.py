@@ -1,4 +1,5 @@
 # screens/main_screen.py
+from unicodedata import name
 from PySide6 import QtCore, QtGui, QtWidgets
 from screens.inventario import InventarioScreen
 from screens.registrar import RegistrarForm
@@ -37,7 +38,7 @@ class MainScreen(QtWidgets.QWidget):
         for name in sections:
             btn = QtWidgets.QPushButton(name)
             btn.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
-            btn.setStyleSheet("background: none; color: #022608; text-align:left; padding-left:8px;")
+            btn.setStyleSheet("background: none; color: #e6eef8; text-align:left; padding-left:8px;")
             btn.setFixedHeight(36)
             btn.clicked.connect(self._on_nav)
             side_layout.addWidget(btn)

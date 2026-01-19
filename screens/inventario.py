@@ -48,6 +48,7 @@ class InventarioScreen(QtWidgets.QWidget):
             "Calidad", "Secado", "Cepillado", "Impregnado", "Obs"
         ]
         self.table = QtWidgets.QTableWidget(0, len(headers))
+        self.table.horizontalHeader().setStyleSheet("color: #e6eef8; background: #0b1220;")
         self.table.setHorizontalHeaderLabels(headers)
         self.table.horizontalHeader().setSectionResizeMode(QtWidgets.QHeaderView.Stretch)
         self.table.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
