@@ -1,3 +1,4 @@
+# screens/inventario.py
 from PySide6 import QtCore, QtWidgets
 from decimal import Decimal
 import csv
@@ -22,7 +23,7 @@ class InventarioScreen(QtWidgets.QWidget):
         v.setSpacing(8)
 
         title = QtWidgets.QLabel("INVENTARIO")
-        title.setStyleSheet("font-size: 16pt; font-weight:600; color: #32D424;")
+        title.setStyleSheet("font-size: 16pt; font-weight:600;")
         v.addWidget(title)
 
         # Toolbar búsqueda
@@ -44,8 +45,8 @@ class InventarioScreen(QtWidgets.QWidget):
         headers = [
             "ID", "SKU", "Tipo", "Cantidad", "Unidad",
             "Largo(m)", "Ancho(cm)", "Espesor(cm)", "Piezas",
-            "Produc.", "Despacho",
-            "Calidad", "Secado", "Cepillado", "Impreg.", "Obs."
+            "Producción", "Despacho",
+            "Calidad", "Secado", "Cepillado", "Impregnado", "Obs"
         ]
         self.table = QtWidgets.QTableWidget(0, len(headers))
         self.table.horizontalHeader().setStyleSheet("color: #e6eef8; background: #0b1220;")
@@ -118,7 +119,7 @@ class InventarioScreen(QtWidgets.QWidget):
             self.load_data(rows)
         except Exception as e:
             QtWidgets.QMessageBox.warning(self, "Error BD", f"No se pudo cargar inventario: {e}")
-
+    
     # -------------------------
     # API pública
     # -------------------------
@@ -127,21 +128,21 @@ class InventarioScreen(QtWidgets.QWidget):
         for r in rows:
             row = (
                 r.get("id"),
-                r.get("sku", ""),
-                r.get("product_type", ""),
+                r.get("sku",""),
+                r.get("product_type",""),
                 Decimal(r.get("quantity") or 0),
-                r.get("unit", ""),
+                r.get("unit",""),
                 Decimal(r.get("largo") or 0),
                 Decimal(r.get("ancho") or 0),
                 Decimal(r.get("espesor") or 0),
                 int(r.get("piezas") or 0),
-                r.get("prod_date", ""),
-                r.get("dispatch_date", ""),
-                r.get("quality", ""),
-                r.get("drying", ""),
-                r.get("planing", ""),
-                r.get("impregnated", ""),
-                r.get("obs", "")
+                r.get("prod_date",""),
+                r.get("dispatch_date",""),
+                r.get("quality",""),
+                r.get("drying",""),
+                r.get("planing",""),
+                r.get("impregnated",""),
+                r.get("obs","")
             )
             self._all_rows.append(row)
         self._refresh_table()
@@ -154,28 +155,27 @@ class InventarioScreen(QtWidgets.QWidget):
                 data["id"] = new_id
             row = (
                 data.get("id"),
-                data.get("sku", ""),
-                data.get("product_type", ""),
+                data.get("sku",""),
+                data.get("product_type",""),
                 Decimal(data.get("quantity") or 0),
-                data.get("unit", ""),
+                data.get("unit",""),
                 Decimal(data.get("largo") or 0),
                 Decimal(data.get("ancho") or 0),
                 Decimal(data.get("espesor") or 0),
                 int(data.get("piezas") or 0),
-                data.get("prod_date", ""),
-                data.get("dispatch_date", ""),
-                data.get("quality", ""),
-                data.get("drying", ""),
-                data.get("planing", ""),
-                data.get("impregnated", ""),
-                data.get("obs", "")
+                data.get("prod_date",""),
+                data.get("dispatch_date",""),
+                data.get("quality",""),
+                data.get("drying",""),
+                data.get("planing",""),
+                data.get("impregnated",""),
+                data.get("obs","")
             )
             self._all_rows.append(row)
             self._insert_table_row(row)
             self._update_info()
         except Exception as e:
             QtWidgets.QMessageBox.warning(self, "Error BD", f"No se pudo guardar: {e}")
-
 
     # -------------------------
     # UI helpers
@@ -275,7 +275,6 @@ class InventarioScreen(QtWidgets.QWidget):
         result = dlg.exec()
 
         if result == QtWidgets.QDialog.Accepted:
-            # 🔹 Actualizar
             new = dlg.get_data()
             new["id"] = data["id"]
             try:
@@ -290,29 +289,6 @@ class InventarioScreen(QtWidgets.QWidget):
             except Exception:
                 self._refresh_table()
 
-        elif result == 99:  # 🔹 nuestro código especial para "Eliminar"
-            msg = QtWidgets.QMessageBox(self)
-            msg.setIcon(QtWidgets.QMessageBox.Question)
-            msg.setWindowTitle("Confirmar eliminación")
-            msg.setText("¿Eliminar definitivamente este registro?")
-            msg.setStandardButtons(QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No)
-            msg.button(QtWidgets.QMessageBox.Yes).setText("Sí")
-            msg.button(QtWidgets.QMessageBox.No).setText("No")
-
-            confirm = msg.exec()
-            if confirm == QtWidgets.QMessageBox.Yes:
-                try:
-                    if self.on_delete:
-                        self.on_delete(int(data["id"]))
-                except Exception as e:
-                    QtWidgets.QMessageBox.critical(self, "Error BD", f"No se pudo eliminar: {e}")
-                    return
-                # Eliminar de la lista local
-                self._all_rows = [r for r in self._all_rows if r[0] != data["id"]]
-                self._refresh_table()
-                self._update_info()
-                QtWidgets.QMessageBox.information(self, "Eliminado", "Registro eliminado correctamente.")
-        
 class InventarioDialog(QtWidgets.QDialog):
     def __init__(self, parent=None, data=None):
         super().__init__(parent)
@@ -323,8 +299,20 @@ class InventarioDialog(QtWidgets.QDialog):
             self._set_data(data)
 
     def _build_ui(self):
+        # Usamos un área con scroll para evitar que el diálogo se desborde
         v = QtWidgets.QVBoxLayout(self)
-        form = QtWidgets.QFormLayout()
+        self.scroll = QtWidgets.QScrollArea()
+        self.scroll.setWidgetResizable(True)
+        v.addWidget(self.scroll)
+
+        self.scroll_content = QtWidgets.QWidget()
+        self.scroll.setWidget(self.scroll_content)
+
+        self.form_layout = QtWidgets.QFormLayout(self.scroll_content)
+        self.form_layout.setLabelAlignment(QtCore.Qt.AlignLeft)
+        self.form_layout.setFormAlignment(QtCore.Qt.AlignTop)
+        self.form_layout.setHorizontalSpacing(16)
+        self.form_layout.setVerticalSpacing(8)
 
         # Campos principales
         self.input_sku = QtWidgets.QLineEdit()
@@ -351,27 +339,25 @@ class InventarioDialog(QtWidgets.QDialog):
         self.input_obs = QtWidgets.QPlainTextEdit(); self.input_obs.setFixedHeight(80)
 
         # Añadir al formulario
-        form.addRow("SKU", self.input_sku)
-        form.addRow("Tipo", self.input_type)
-        form.addRow("Cantidad", self.input_quantity)
-        form.addRow("Unidad", self.input_unit)
-        form.addRow("Largo(m)", self.input_largo)
-        form.addRow("Ancho(cm)", self.input_ancho)
-        form.addRow("Espesor(cm)", self.input_espesor)
-        form.addRow("Piezas", self.input_piezas)
-        form.addRow("Producción", self.input_prod_date)
-        form.addRow("Despacho", self.input_dispatch_date)
-        form.addRow("Calidad", self.input_quality)
-        form.addRow("Secado", self.input_drying)
-        form.addRow("Cepillado", self.input_planing)
-        form.addRow("Impregnado", self.input_impregnated)
-        form.addRow("Observación", self.input_obs)
+        self.form_layout.addRow("SKU", self.input_sku)
+        self.form_layout.addRow("Tipo", self.input_type)
+        self.form_layout.addRow("Cantidad", self.input_quantity)
+        self.form_layout.addRow("Unidad", self.input_unit)
+        self.form_layout.addRow("Largo", self.input_largo)
+        self.form_layout.addRow("Ancho", self.input_ancho)
+        self.form_layout.addRow("Espesor", self.input_espesor)
+        self.form_layout.addRow("Nº Piezas", self.input_piezas)
+        self.form_layout.addRow("Producción", self.input_prod_date)
+        self.form_layout.addRow("Despacho", self.input_dispatch_date)
+        self.form_layout.addRow("Calidad", self.input_quality)
+        self.form_layout.addRow("Secado", self.input_drying)
+        self.form_layout.addRow("Cepillado", self.input_planing)
+        self.form_layout.addRow("Impregnado", self.input_impregnated)
+        self.form_layout.addRow("Observación", self.input_obs)
 
-        v.addLayout(form)
-
-        # Botones aceptar/cancelar
+        # Botones
         btns = QtWidgets.QDialogButtonBox(
-    QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel
+            QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel
         )
         btns.button(QtWidgets.QDialogButtonBox.Cancel).setText("Cancelar")
 
@@ -379,10 +365,6 @@ class InventarioDialog(QtWidgets.QDialog):
         self.btn_delete = btns.addButton("Eliminar", QtWidgets.QDialogButtonBox.DestructiveRole)
         self.btn_delete.clicked.connect(self._on_delete)
 
-        btns.accepted.connect(self._on_accept)
-        btns.rejected.connect(self.reject)
-        v.addWidget(btns)
-        
         btns.accepted.connect(self._on_accept)
         btns.rejected.connect(self.reject)
         v.addWidget(btns)
