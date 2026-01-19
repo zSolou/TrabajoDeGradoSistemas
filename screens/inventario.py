@@ -44,8 +44,8 @@ class InventarioScreen(QtWidgets.QWidget):
         headers = [
             "ID", "SKU", "Tipo", "Cantidad", "Unidad",
             "Largo(m)", "Ancho(cm)", "Espesor(cm)", "Piezas",
-            "Producción", "Despacho",
-            "Calidad", "Secado", "Cepillado", "Impregnado", "Obs"
+            "Produc.", "Despacho",
+            "Calidad", "Secado", "Cepillado", "Impreg.", "Obs."
         ]
         self.table = QtWidgets.QTableWidget(0, len(headers))
         self.table.horizontalHeader().setStyleSheet("color: #e6eef8; background: #0b1220;")
@@ -355,9 +355,9 @@ class InventarioDialog(QtWidgets.QDialog):
         form.addRow("Tipo", self.input_type)
         form.addRow("Cantidad", self.input_quantity)
         form.addRow("Unidad", self.input_unit)
-        form.addRow("Largo", self.input_largo)
-        form.addRow("Ancho", self.input_ancho)
-        form.addRow("Espesor", self.input_espesor)
+        form.addRow("Largo(m)", self.input_largo)
+        form.addRow("Ancho(cm)", self.input_ancho)
+        form.addRow("Espesor(cm)", self.input_espesor)
         form.addRow("Piezas", self.input_piezas)
         form.addRow("Producción", self.input_prod_date)
         form.addRow("Despacho", self.input_dispatch_date)
