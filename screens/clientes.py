@@ -13,7 +13,7 @@ class ClientesScreen(QtWidgets.QWidget):
         layout = QtWidgets.QVBoxLayout(self)
         title = QtWidgets.QLabel("CLIENTES")
         title.setAlignment(QtCore.Qt.AlignCenter)
-        title.setStyleSheet("font-size: 16pt; font-weight:600;")
+        title.setStyleSheet("font-size: 16pt; font-weight:600;color: #32D424;")
         layout.addWidget(title)
 
         btn_row = QtWidgets.QHBoxLayout()

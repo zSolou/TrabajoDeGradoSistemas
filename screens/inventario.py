@@ -22,7 +22,7 @@ class InventarioScreen(QtWidgets.QWidget):
         v.setSpacing(8)
 
         title = QtWidgets.QLabel("INVENTARIO")
-        title.setStyleSheet("font-size: 16pt; font-weight:600;")
+        title.setStyleSheet("font-size: 16pt; font-weight:600; color: #32D424;")
         v.addWidget(title)
 
         # Toolbar búsqueda

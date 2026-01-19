@@ -10,7 +10,7 @@ class ManualScreen(QtWidgets.QWidget):
         layout = QtWidgets.QVBoxLayout(self)
         title = QtWidgets.QLabel("MANUAL DE USUARIO")
         title.setAlignment(QtCore.Qt.AlignCenter)
-        title.setStyleSheet("font-size: 16pt; font-weight:600;")
+        title.setStyleSheet("font-size: 16pt; font-weight:600; color: #32D424;")
         layout.addWidget(title)
 
         # Contenido del manual (texto de ejemplo)

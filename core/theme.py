@@ -33,7 +33,6 @@ class ThemeManager:
 
     def _load_theme(self) -> str:
         try:
-            # Ajusta el nombre de la organización/app según tu proyecto
             settings = QSettings("TrabajoDeGradoSistemas", "OpenCode")
             t = settings.value(self.THEME_KEY, self.THEME_DARK)
             if isinstance(t, str) and t in (self.THEME_DARK, self.THEME_LIGHT):
@@ -42,14 +41,14 @@ class ThemeManager:
             pass
         return self.THEME_DARK
 
-    def _save_theme(self, theme: str) -> None:
+    def _save_theme(self, theme: str):
         try:
             settings = QSettings("TrabajoDeGradoSistemas", "OpenCode")
             settings.setValue(self.THEME_KEY, theme)
         except Exception:
             pass
 
-    def _apply(self, theme: str) -> None:
+    def _apply(self, theme: str):
         if not self.app:
             return
         self.app.setStyleSheet(DARK_THEME if theme == self.THEME_DARK else LIGHT_THEME)

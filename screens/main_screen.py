@@ -1,5 +1,4 @@
 # screens/main_screen.py
-from unicodedata import name
 from PySide6 import QtCore, QtGui, QtWidgets
 from screens.inventario import InventarioScreen
 from screens.registrar import RegistrarForm
@@ -8,15 +7,20 @@ from screens.manual import ManualScreen
 from screens.clientes import ClientesScreen
 from core.repo import create_product_with_inventory, list_inventory_rows
 import core.repo as repo
+from core.theme import ThemeManager
+
 
 class MainScreen(QtWidgets.QWidget):
     def __init__(self, parent=None, current_user=None):
         super().__init__(parent)
+        # Theme manager (central)
+        self.theme_manager = ThemeManager()
         # Guardamos el usuario autenticado (dict con id, username, role)
         self.current_user = current_user
         self._build_ui()
         self.inventario.on_delete = repo.delete_inventory
         
+
     def _build_ui(self):
         h = QtWidgets.QHBoxLayout(self)
         h.setContentsMargins(0,0,0,0)
@@ -43,6 +47,15 @@ class MainScreen(QtWidgets.QWidget):
             btn.clicked.connect(self._on_nav)
             side_layout.addWidget(btn)
             self.buttons[name] = btn
+
+        # Tema
+        self.btn_theme = QtWidgets.QPushButton("Tema")
+        self.btn_theme.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
+        self.btn_theme.setStyleSheet("background: none; color: #e6eef8; text-align:left; padding-left:8px;")
+        self.btn_theme.setFixedHeight(36)
+        self.btn_theme.clicked.connect(self._on_toggle_theme)
+        side_layout.addWidget(self.btn_theme)
+
         side_layout.addStretch(1)
 
         # Stack central con pantallas internas
@@ -82,25 +95,28 @@ class MainScreen(QtWidgets.QWidget):
         Persistir en BD y actualizar la vista.
         """
         try:
-            # Añadir performed_by si tenemos usuario autenticado
             if self.current_user:
                 data["performed_by"] = self.current_user.get("id")
 
-            # Persistir en la BD
             result = create_product_with_inventory(data)
             data["id"] = result.get("inventory_id") or data.get("id")
 
-            # Añadir a la vista local (opcional)
             if hasattr(self.inventario, "add_row_from_registrar"):
                 self.inventario.add_row_from_registrar(data)
 
-            # Refrescar desde BD para asegurar consistencia
             try:
                 self.inventario.refresh_from_db(__import__("core.repo", fromlist=["core"]).repo)
             except Exception:
                 pass
 
-            # Cambiar a inventario
             self.stack.setCurrentIndex(0)
         except Exception as e:
             QtWidgets.QMessageBox.critical(self, "Error al guardar", f"No se pudo guardar en la base de datos: {e}")
+
+    def _on_toggle_theme(self):
+        """Toggle theme using ThemeManager."""
+        try:
+            if hasattr(self, "theme_manager") and self.theme_manager:
+                self.theme_manager.toggle_theme()
+        except Exception as e:
+            QtWidgets.QMessageBox.warning(self, "Error", f"No se pudo cambiar el tema: {e}")
