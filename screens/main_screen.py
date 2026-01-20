@@ -6,7 +6,6 @@ from screens.reportes import ReportesScreen
 from screens.manual import ManualScreen
 from screens.clientes import ClientesScreen
 import core.repo as repo
-from core.repo import create_product_with_inventory, list_inventory_rows
 from core.theme import ThemeManager
 
 
@@ -15,8 +14,6 @@ class MainScreen(QtWidgets.QWidget):
         super().__init__(parent)
         # Theme manager (central)
         self.theme_manager = ThemeManager()
-        # Guardamos el usuario autenticado (dict con id, username, role)
-        self.current_user = current_user
         self._build_ui()
         self.inventario.on_delete = repo.delete_inventory
         # Actualizar etiqueta del tema al iniciar
@@ -136,7 +133,6 @@ class MainScreen(QtWidgets.QWidget):
         try:
             if hasattr(self, "theme_manager") and self.theme_manager:
                 current = getattr(self.theme_manager, "current_theme", None)
-                # current_theme debe ser 'dark' o 'light'
                 if current == self.theme_manager.THEME_DARK:
                     self.btn_theme.setText("Tema: Oscuro")
                 else:
