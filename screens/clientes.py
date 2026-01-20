@@ -2,6 +2,7 @@
 from PySide6 import QtCore, QtWidgets, QtGui
 import core.repo as repo
 
+
 class ClientesScreen(QtWidgets.QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -13,7 +14,7 @@ class ClientesScreen(QtWidgets.QWidget):
         layout = QtWidgets.QVBoxLayout(self)
         title = QtWidgets.QLabel("CLIENTES")
         title.setAlignment(QtCore.Qt.AlignCenter)
-        title.setStyleSheet("font-size: 16pt; font-weight:600;color: #32D424;")
+        title.setStyleSheet("font-size: 16pt; font-weight:600;")
         layout.addWidget(title)
 
         btn_row = QtWidgets.QHBoxLayout()
@@ -58,10 +59,11 @@ class ClientesScreen(QtWidgets.QWidget):
     def _add_row(self, data):
         row_idx = self.table.rowCount()
         self.table.insertRow(row_idx)
-        for i, key in enumerate(["nombre", "telefono", "direccion", "email", "cedula_rif"]):
-            item = QtWidgets.QTableWidgetItem(data.get(key, ""))
-            item.setFlags(item.flags() ^ QtCore.Qt.ItemIsEditable)
-            self.table.setItem(row_idx, i, item)
+        self.table.setItem(row_idx, 0, QtWidgets.QTableWidgetItem(data.get("nombre", "")))
+        self.table.setItem(row_idx, 1, QtWidgets.QTableWidgetItem(data.get("telefono", "")))
+        self.table.setItem(row_idx, 2, QtWidgets.QTableWidgetItem(data.get("direccion", "")))
+        self.table.setItem(row_idx, 3, QtWidgets.QTableWidgetItem(data.get("email", "")))
+        self.table.setItem(row_idx, 4, QtWidgets.QTableWidgetItem(data.get("cedula_rif", "")))
 
     def _get_selected_index(self):
         sel = self.table.selectionModel().selectedRows()
@@ -139,12 +141,18 @@ class ClienteDialog(QtWidgets.QDialog):
         self.input_telefono = QtWidgets.QLineEdit()
         self.input_direccion = QtWidgets.QLineEdit()
         self.input_email = QtWidgets.QLineEdit()
-        self.input_cedula_rif = QtWidgets.QLineEdit()
+
+        # Nueva estructura: selector de tipo ID y número
+        self.input_tipo_rif = QtWidgets.QComboBox()
+        self.input_tipo_rif.addItems(["V-", "J-"])
+        self.input_rif_num = QtWidgets.QLineEdit()
+
         form.addRow("Nombre", self.input_nombre)
         form.addRow("Teléfono", self.input_telefono)
         form.addRow("Dirección", self.input_direccion)
         form.addRow("Email", self.input_email)
-        form.addRow("Cédula/RIF", self.input_cedula_rif)
+        form.addRow("Tipo ID", self.input_tipo_rif)
+        form.addRow("Número", self.input_rif_num)
         v.addLayout(form)
 
         btns = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel)
@@ -157,26 +165,56 @@ class ClienteDialog(QtWidgets.QDialog):
         self.input_telefono.setText(data.get("telefono", ""))
         self.input_direccion.setText(data.get("direccion", ""))
         self.input_email.setText(data.get("email", ""))
-        self.input_cedula_rif.setText(data.get("cedula_rif", ""))
+
+        ced = data.get("cedula_rif", "")
+        if ced:
+            if ced.startswith("V-") or ced.startswith("J-"):
+                t = ced[:2]
+                num = ced[2:]
+            else:
+                t = "V-"
+                num = ced
+        else:
+            t = "V-"
+            num = ""
+
+        self.input_tipo_rif.setCurrentText(t)
+        self.input_rif_num.setText(num)
 
     def _on_accept(self):
         if not self.input_nombre.text().strip():
             QtWidgets.QMessageBox.warning(self, "Validación", "El nombre es obligatorio.")
             return
-        cedula_rif = self.input_cedula_rif.text().strip()
-        if not cedula_rif:
-            QtWidgets.QMessageBox.warning(self, "Validación", "Debe ingresar la Cédula o RIF.")
+
+        numero = self.input_rif_num.text().strip()
+        if not numero:
+            QtWidgets.QMessageBox.warning(self, "Validación", "Debe ingresar el número de identificación.")
             return
-        if not (cedula_rif.startswith("V-") or cedula_rif.startswith("J-")):
-            QtWidgets.QMessageBox.warning(self, "Validación", "Formato inválido. Use V-12345678 o J-12345678-9.")
+        if not numero.isdigit():
+            QtWidgets.QMessageBox.warning(self, "Validación", "Formato inválido. Ingrese sólo dígitos en el número.")
             return
+
+        tipo = self.input_tipo_rif.currentText()
+        if tipo == "V-" and len(numero) > 8:
+            QtWidgets.QMessageBox.warning(self, "Validación", "La cédula (V-) no debe exceder 8 dígitos.")
+            return
+        if tipo == "J-" and len(numero) > 12:
+            QtWidgets.QMessageBox.warning(self, "Validación", "La cédula (J-) no debe exceder 12 dígitos.")
+            return
+
         self.accept()
 
+    def _on_delete(self):
+        # Mantener eliminación si exists (opcional para future)
+        self.done(99)
+
     def get_data(self):
+        numero = self.input_rif_num.text().strip()
+        cedula_rif = f"{self.input_tipo_rif.currentText()}{numero}"
         return {
             "nombre": self.input_nombre.text().strip(),
             "telefono": self.input_telefono.text().strip(),
             "direccion": self.input_direccion.text().strip(),
             "email": self.input_email.text().strip(),
-            "cedula_rif": self.input_cedula_rif.text().strip(),
+            "cedula_rif": cedula_rif,
         }
