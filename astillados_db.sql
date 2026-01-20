@@ -49,8 +49,6 @@ CREATE TABLE products (
 CREATE TABLE inventory (
   id SERIAL PRIMARY KEY,
   product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
-  lot_code TEXT,
-  location TEXT,
   quantity NUMERIC(18,6) NOT NULL DEFAULT 0,  -- precisión para m3
   unit_cost NUMERIC(18,4),
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),

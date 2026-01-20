@@ -1,4 +1,3 @@
-# screens/inventario.py
 from PySide6 import QtCore, QtWidgets
 from decimal import Decimal
 import csv
@@ -6,6 +5,9 @@ import core.repo as repo
 from datetime import datetime, date
 
 class InventarioScreen(QtWidgets.QWidget):
+
+    # Señal para notificar que el inventario cambió (creación/actualización/eliminación)
+    inventory_changed = QtCore.Signal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -99,10 +101,8 @@ class InventarioScreen(QtWidgets.QWidget):
             QtWidgets.QMessageBox.critical(self, "Error BD", f"No se pudo eliminar: {e}")
             return
 
-        # Eliminar de la lista local
-        self._all_rows = [r for r in self._all_rows if str(r[0]) != current_id]
-        self._refresh_table()
-        self._update_info()
+        # Refrescar desde DB para reflejar el cambio
+        self._reload_from_db()
         QtWidgets.QMessageBox.information(self, "Eliminado", "Producto eliminado correctamente.")
     
     def _connect_signals(self):
@@ -169,7 +169,7 @@ class InventarioScreen(QtWidgets.QWidget):
                 Decimal(data.get("ancho") or 0),
                 Decimal(data.get("espesor") or 0),
                 int(data.get("piezas") or 0),
-                data.get("prod_date", "" ),
+                data.get("prod_date",""),
                 data.get("dispatch_date",""),
                 data.get("quality",""),
                 data.get("drying",""),
@@ -180,6 +180,8 @@ class InventarioScreen(QtWidgets.QWidget):
             self._all_rows.append(row)
             self._insert_table_row(row)
             self._update_info()
+            # Refrescar desde DB para asegurar consistencia
+            self._reload_from_db()
         except Exception as e:
             QtWidgets.QMessageBox.warning(self, "Error BD", f"No se pudo guardar: {e}")
 
@@ -224,7 +226,7 @@ class InventarioScreen(QtWidgets.QWidget):
         self.info_lbl.setText(f"Registros: {visible} / {total_rows}")
 
     def _on_refresh(self):
-        self._refresh_table()
+        self._reload_from_db()
 
     def _on_export(self):
         path, _ = QtWidgets.QFileDialog.getSaveFileName(self, "Exportar CSV", "inventario.csv", "CSV Files (*.csv)")
@@ -291,7 +293,7 @@ class InventarioScreen(QtWidgets.QWidget):
             try:
                 self.refresh_from_db(repo)
             except Exception:
-                self._refresh_table()
+                self._reload_from_db()
 
         elif result == 99:  # 🔹 nuestro código especial para "Eliminar"
             msg = QtWidgets.QMessageBox(self)
@@ -310,11 +312,16 @@ class InventarioScreen(QtWidgets.QWidget):
                 except Exception as e:
                     QtWidgets.QMessageBox.critical(self, "Error BD", f"No se pudo eliminar: {e}")
                     return
-                self._all_rows = [r for r in self._all_rows if r[0] != data["id"]]
-                self._refresh_table()
-                self._update_info()
+                self._reload_from_db()
                 QtWidgets.QMessageBox.information(self, "Eliminado", "Registro eliminado correctamente.")
 
+    def _reload_from_db(self):
+        try:
+            rows = repo.list_inventory_rows()
+            self.load_data(rows)
+            self.inventory_changed.emit()
+        except Exception as e:
+            QtWidgets.QMessageBox.warning(self, "Error BD", f"No se pudo recargar inventario: {e}")
 
 class InventarioDialog(QtWidgets.QDialog):
     def __init__(self, parent=None, data=None):

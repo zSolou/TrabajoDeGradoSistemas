@@ -21,8 +21,7 @@ def create_product(sku: str, name: str, unit: str = None, quality: str = None, d
 def create_product_with_inventory(data: dict):
     """
     data: dict con keys mínimas: sku, name, quantity
-    y opcionales: unit, quality, lot_code, location,
-    largo, ancho, espesor, piezas, prod_date, dispatch_date,
+    y opcionales: unit, quality, largo, ancho, espesor, piezas, prod_date, dispatch_date,
     drying, planing, impregnated, obs, performed_by
     """
     from datetime import datetime
@@ -31,6 +30,8 @@ def create_product_with_inventory(data: dict):
             return None
         # Qt ISODate: 'YYYY-MM-DD' o 'YYYY-MM-DDThh:mm:ss'
         try:
+            if isinstance(s, datetime):
+                return s
             if "T" in s:
                 return datetime.fromisoformat(s)
             return datetime.strptime(s, "%Y-%m-%d")
@@ -58,11 +59,9 @@ def create_product_with_inventory(data: dict):
                 session.add(prod)
                 session.flush()
 
-            # Inventario con medidas/atributos
+            # Inventario (sin lot_code/location)
             inv = Inventory(
                 product_id=prod.id,
-                lot_code=(data.get("lot_code") or "").strip(),
-                location=(data.get("location") or "").strip(),
                 quantity=Decimal(str(data.get("quantity") or 0)),
                 largo=Decimal(str(data.get("largo"))) if data.get("largo") is not None else None,
                 ancho=Decimal(str(data.get("ancho"))) if data.get("ancho") is not None else None,
@@ -98,7 +97,7 @@ def create_product_with_inventory(data: dict):
         except Exception:
             session.rollback()
             raise
-        
+
 def insert_inventory(data: dict):
     with SessionLocal() as session:
         inv = Inventory(
@@ -120,6 +119,8 @@ def insert_inventory(data: dict):
         session.commit()
         session.refresh(inv)
         return inv.id
+
+# ---------- list/inventory ----------
 
 def list_inventory_rows():
     with SessionLocal() as session:
@@ -163,8 +164,8 @@ def list_inventory_rows():
                 "ancho": float(r[6]) if r[6] is not None else 0.0,
                 "espesor": float(r[7]) if r[7] is not None else 0.0,
                 "piezas": int(r[8]) if r[8] is not None else 0,
-                "prod_date": to_date_str(r[9]),
-                "dispatch_date": to_date_str(r[10]),
+                "prod_date": r[9],
+                "dispatch_date": r[10],
                 "quality": r[11] or "",
                 "drying": r[12] or "",
                 "planing": r[13] or "",
@@ -192,7 +193,7 @@ def update_inventory(data: dict):
         inv.impregnated = data.get("impregnated")
         inv.obs = data.get("obs")
 
-        session.commit()    
+        session.commit()
 
 def get_product_by_sku(sku: str):
     with SessionLocal() as session:
@@ -210,12 +211,7 @@ def get_inventory_by_product(product_id: int):
         return session.execute(stmt).scalars().all()
 
 def register_movement(product_id: int, change_qty: Decimal, movement_type: str, inventory_id: int = None, performed_by: int = None, reference: str = None, notes: str = None):
-    """
-    Registra un movimiento y actualiza inventory.quantity dentro de una transacción.
-    Si inventory_id es None, intenta usar la primera fila de inventory para el producto.
-    """
     with SessionLocal() as session:
-        # obtener o crear inventario objetivo
         inv = None
         if inventory_id:
             inv = session.get(Inventory, inventory_id)
@@ -224,12 +220,10 @@ def register_movement(product_id: int, change_qty: Decimal, movement_type: str, 
         else:
             inv = session.execute(select(Inventory).where(Inventory.product_id == product_id).limit(1)).scalars().first()
             if inv is None:
-                # crear registro de inventario vacío si no existe
                 inv = Inventory(product_id=product_id, quantity=0)
                 session.add(inv)
-                session.flush()  # para obtener id
+                session.flush()
 
-        # insertar movimiento
         mv = Movement(
             inventory_id=inv.id,
             product_id=product_id,
@@ -241,7 +235,6 @@ def register_movement(product_id: int, change_qty: Decimal, movement_type: str, 
         )
         session.add(mv)
 
-        # actualizar cantidad
         new_qty = (inv.quantity or 0) + Decimal(change_qty)
         if new_qty < 0:
             raise ValueError("Stock insuficiente para esta operación")
@@ -250,7 +243,7 @@ def register_movement(product_id: int, change_qty: Decimal, movement_type: str, 
         session.commit()
         session.refresh(mv)
         return mv
-    
+
 def delete_inventory(inventory_id: int):
     with SessionLocal() as session:
         inv = session.get(Inventory, inventory_id)
@@ -340,7 +333,7 @@ def create_user_plain(username: str, password: str, full_name: str = None,
 
 def authenticate_user_plain(username: str, password: str):
     """
-    Autentica comparando directamente la contraseña con lo almacenado en la BD.
+    Autentica comparando directamente la contraseña con la almacenada en la BD.
     Devuelve dict con id, username, role si credenciales válidas, o None.
     """
     with SessionLocal() as session:

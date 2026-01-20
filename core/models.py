@@ -1,4 +1,4 @@
-# models.py
+# core/models.py
 from sqlalchemy import (
     Column, Integer, String, Text, Boolean, DateTime, Numeric, ForeignKey, JSON
 )
@@ -17,7 +17,7 @@ class User(Base):
     role = Column(String, nullable=False, default="user")
     email = Column(String)
     active = Column(Boolean, default=True)
-  
+
 class Client(Base):
     __tablename__ = "clients"
 
@@ -27,9 +27,8 @@ class Client(Base):
     phone = Column(Text)
     email = Column(Text)
     address = Column(Text)
-    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
-    updated_at = Column(DateTime, onupdate=datetime.utcnow)
-
+    created_at = Column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
+    updated_at = Column(DateTime(timezone=True), onupdate=datetime.utcnow)
 
 class Product(Base):
     __tablename__ = "products"
@@ -47,13 +46,12 @@ class Inventory(Base):
     __tablename__ = "inventory"
     id = Column(Integer, primary_key=True)
     product_id = Column(Integer, ForeignKey("products.id", ondelete="CASCADE"), nullable=False)
-    lot_code = Column(String)
-    location = Column(String)
+    # Eliminadas: lot_code y location
     quantity = Column(Numeric(18,6), nullable=False, default=0)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
-    # 🔹 Nuevas columnas para medidas y atributos
+    # Atributos de medida y producción
     largo = Column(Numeric(10,2))
     ancho = Column(Numeric(10,2))
     espesor = Column(Numeric(10,2))
