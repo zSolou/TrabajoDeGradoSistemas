@@ -3,7 +3,7 @@ from PySide6 import QtCore, QtWidgets
 from decimal import Decimal
 import csv
 import core.repo as repo
-from datetime import datetime
+from datetime import datetime, date
 
 class InventarioScreen(QtWidgets.QWidget):
 
@@ -52,7 +52,6 @@ class InventarioScreen(QtWidgets.QWidget):
             "Calidad", "Secado", "Cepillado", "Impregnado", "Obs"
         ]
         self.table = QtWidgets.QTableWidget(0, len(headers))
-        self.table.horizontalHeader().setStyleSheet("color: #e6eef8; background: #0b1220;")
         self.table.setHorizontalHeaderLabels(headers)
         self.table.horizontalHeader().setSectionResizeMode(QtWidgets.QHeaderView.Stretch)
         self.table.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
@@ -152,15 +151,14 @@ class InventarioScreen(QtWidgets.QWidget):
         self._update_info()
 
     def add_row_from_registrar(self, data: dict):
+        """
+        Añade una fila resultante de registrar un nuevo producto
+        llamando a self.on_create (wrapper hacia el repositorio).
+        """
         try:
             new_id = self.on_create(data) if self.on_create else None
-            if isinstance(new_id, dict):
-                inv_id = new_id.get("inventory_id") or new_id.get("inventoryId") or new_id.get("id")
-                if inv_id:
-                    data["id"] = inv_id
-            else:
-                if new_id:
-                    data["id"] = new_id
+            if new_id:
+                data["id"] = new_id
             row = (
                 data.get("id"),
                 data.get("sku",""),
@@ -171,7 +169,7 @@ class InventarioScreen(QtWidgets.QWidget):
                 Decimal(data.get("ancho") or 0),
                 Decimal(data.get("espesor") or 0),
                 int(data.get("piezas") or 0),
-                data.get("prod_date",""),
+                data.get("prod_date", "" ),
                 data.get("dispatch_date",""),
                 data.get("quality",""),
                 data.get("drying",""),
@@ -258,7 +256,6 @@ class InventarioScreen(QtWidgets.QWidget):
         if not current:
             return
 
-        # Construir diccionario con los datos actuales
         data = {
             "id": current[0],
             "sku": current[1],
@@ -278,7 +275,6 @@ class InventarioScreen(QtWidgets.QWidget):
             "obs": current[15]
         }
 
-        # Abrir diálogo de edición
         dlg = InventarioDialog(self, data)
         result = dlg.exec()
 
@@ -348,7 +344,7 @@ class InventarioDialog(QtWidgets.QDialog):
         # Campos principales
         self.input_sku = QtWidgets.QLineEdit()
         self.input_type = QtWidgets.QComboBox()
-        self.input_type.addItems(["Tablas", "Machihembrado", "Tablones", "Paletas"])
+        self.input_type.addItems(["Tablas", "Machihembrado", "Aserrín"])
         self.input_quantity = QtWidgets.QDoubleSpinBox(); self.input_quantity.setDecimals(2); self.input_quantity.setRange(0, 1_000_000)
         self.input_unit = QtWidgets.QLineEdit()
 
@@ -450,8 +446,6 @@ class InventarioDialog(QtWidgets.QDialog):
         msg.setWindowTitle("Confirmar eliminación")
         msg.setText("¿Está seguro de eliminar este registro de inventario?")
         msg.setStandardButtons(QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No)
-
-        # Cambiar textos de los botones
         msg.button(QtWidgets.QMessageBox.Yes).setText("Sí")
         msg.button(QtWidgets.QMessageBox.No).setText("No")
         result = msg.exec()
