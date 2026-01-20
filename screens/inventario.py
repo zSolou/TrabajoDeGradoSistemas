@@ -3,14 +3,17 @@ from PySide6 import QtCore, QtWidgets
 from decimal import Decimal
 import csv
 import core.repo as repo
+from datetime import datetime
 
 class InventarioScreen(QtWidgets.QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        # CRUD hooks (asignarlos desde el UI/gestor de dependencias)
         self.on_create = None
         self.on_update = None
         self.on_delete = None
+
         self._all_rows = []
         self._build_ui()
         self.btn_delete = QtWidgets.QPushButton("Eliminar")
@@ -151,8 +154,13 @@ class InventarioScreen(QtWidgets.QWidget):
     def add_row_from_registrar(self, data: dict):
         try:
             new_id = self.on_create(data) if self.on_create else None
-            if new_id:
-                data["id"] = new_id
+            if isinstance(new_id, dict):
+                inv_id = new_id.get("inventory_id") or new_id.get("inventoryId") or new_id.get("id")
+                if inv_id:
+                    data["id"] = inv_id
+            else:
+                if new_id:
+                    data["id"] = new_id
             row = (
                 data.get("id"),
                 data.get("sku",""),
@@ -289,6 +297,29 @@ class InventarioScreen(QtWidgets.QWidget):
             except Exception:
                 self._refresh_table()
 
+        elif result == 99:  # 🔹 nuestro código especial para "Eliminar"
+            msg = QtWidgets.QMessageBox(self)
+            msg.setIcon(QtWidgets.QMessageBox.Question)
+            msg.setWindowTitle("Confirmar eliminación")
+            msg.setText("¿Eliminar definitivamente este registro?")
+            msg.setStandardButtons(QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No)
+            msg.button(QtWidgets.QMessageBox.Yes).setText("Sí")
+            msg.button(QtWidgets.QMessageBox.No).setText("No")
+
+            confirm = msg.exec()
+            if confirm == QtWidgets.QMessageBox.Yes:
+                try:
+                    if self.on_delete:
+                        self.on_delete(int(data["id"]))
+                except Exception as e:
+                    QtWidgets.QMessageBox.critical(self, "Error BD", f"No se pudo eliminar: {e}")
+                    return
+                self._all_rows = [r for r in self._all_rows if r[0] != data["id"]]
+                self._refresh_table()
+                self._update_info()
+                QtWidgets.QMessageBox.information(self, "Eliminado", "Registro eliminado correctamente.")
+
+
 class InventarioDialog(QtWidgets.QDialog):
     def __init__(self, parent=None, data=None):
         super().__init__(parent)
@@ -317,7 +348,7 @@ class InventarioDialog(QtWidgets.QDialog):
         # Campos principales
         self.input_sku = QtWidgets.QLineEdit()
         self.input_type = QtWidgets.QComboBox()
-        self.input_type.addItems(["Tablas", "Machihembrado", "Aserrín"])
+        self.input_type.addItems(["Tablas", "Machihembrado", "Tablones", "Paletas"])
         self.input_quantity = QtWidgets.QDoubleSpinBox(); self.input_quantity.setDecimals(2); self.input_quantity.setRange(0, 1_000_000)
         self.input_unit = QtWidgets.QLineEdit()
 
@@ -402,6 +433,17 @@ class InventarioDialog(QtWidgets.QDialog):
             return
         self.accept()
         
+    def _to_datetime(self, qdate):
+        if not qdate:
+            return None
+        year = qdate.year()
+        month = qdate.month()
+        day = qdate.day()
+        try:
+            return datetime(year, month, day)
+        except Exception:
+            return None
+
     def _on_delete(self):
         msg = QtWidgets.QMessageBox(self)
         msg.setIcon(QtWidgets.QMessageBox.Question)
@@ -412,13 +454,16 @@ class InventarioDialog(QtWidgets.QDialog):
         # Cambiar textos de los botones
         msg.button(QtWidgets.QMessageBox.Yes).setText("Sí")
         msg.button(QtWidgets.QMessageBox.No).setText("No")
-
         result = msg.exec()
         if result == QtWidgets.QMessageBox.Yes:
-            # devolvemos un código especial para que InventarioScreen sepa que fue "Eliminar"
             self.done(99)
         
     def get_data(self):
+        prod_q = self.input_prod_date.date()
+        dispatch_q = self.input_dispatch_date.date()
+        prod_dt = self._to_datetime(prod_q)
+        disp_dt = self._to_datetime(dispatch_q)
+
         return {
             "sku": self.input_sku.text().strip(),
             "product_type": self.input_type.currentText(),
@@ -432,8 +477,8 @@ class InventarioDialog(QtWidgets.QDialog):
             "piezas": int(self.input_piezas.value()),
 
             # Fechas
-            "prod_date": self.input_prod_date.date().toString(QtCore.Qt.ISODate),
-            "dispatch_date": self.input_dispatch_date.date().toString(QtCore.Qt.ISODate),
+            "prod_date": prod_dt,
+            "dispatch_date": disp_dt,
 
             # Otros atributos
             "quality": self.input_quality.currentText(),
