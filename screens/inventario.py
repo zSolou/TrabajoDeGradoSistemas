@@ -1,3 +1,4 @@
+# screens/inventario.py
 from PySide6 import QtCore, QtWidgets
 from decimal import Decimal
 import csv
@@ -323,7 +324,6 @@ class InventarioScreen(QtWidgets.QWidget):
         except Exception as e:
             QtWidgets.QMessageBox.warning(self, "Error BD", f"No se pudo recargar inventario: {e}")
 
-
 class InventarioDialog(QtWidgets.QDialog):
     def __init__(self, parent=None, data=None):
         super().__init__(parent)
@@ -429,7 +429,6 @@ class InventarioDialog(QtWidgets.QDialog):
                 qd = QtCore.QDate.fromString(value, QtCore.Qt.ISODate)
                 if qd.isValid():
                     return qd
-                # Intentar parsear ISO con datetime
                 try:
                     dt = datetime.fromisoformat(value)
                     return QtCore.QDate(dt.year, dt.month, dt.day)

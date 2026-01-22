@@ -20,6 +20,7 @@ class User(Base):
 
 class Client(Base):
     __tablename__ = "clients"
+
     id = Column(Integer, primary_key=True, index=True)
     name = Column(Text, nullable=False)
     document_id = Column(Text)
@@ -56,8 +57,8 @@ class Inventory(Base):
     espesor = Column(Numeric(10,2))
     piezas = Column(Integer)
 
-    prod_date = Column(Date)      # <-- cambiado a Date
-    dispatch_date = Column(Date)  # <-- cambiado a Date
+    prod_date = Column(Date)      # Fecha de producción (Date)
+    dispatch_date = Column(Date)  # Fecha de despacho (Date)
 
     quality = Column(String)
     drying = Column(String)

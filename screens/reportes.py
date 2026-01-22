@@ -89,7 +89,7 @@ class ReportesScreen(QtWidgets.QWidget):
             self.chart_label.setAlignment(QtCore.Qt.AlignCenter)
             main.addWidget(self.chart_label)
 
-        # Tabla de detalle
+        # Tabla de detalle (opcional)
         self.table = QtWidgets.QTableWidget(0, 4)
         self.table.setHorizontalHeaderLabels(["SKU","Tipo","Cantidad","Prod_Date"])
         self.table.horizontalHeader().setStretchLastSection(True)
@@ -115,6 +115,23 @@ class ReportesScreen(QtWidgets.QWidget):
             QtWidgets.QMessageBox.warning(self, "Error BD", f"No se pudieron cargar las filas de inventario: {e}")
             self.all_rows = []
         self._apply_filters()
+
+    def load_data(self, rows):
+        """API para recibir filas ya obtenidas (para recargas externas)."""
+        self.all_rows = rows or []
+        self._apply_filters()
+
+    def refresh_from_db(self, repo_param=None):
+        """
+        Permite que main_screen llame a refresh desde DB.
+        Se puede pasar el módulo repo como argumento; si no, usa el import actual.
+        """
+        try:
+            mod = repo_param if repo_param is not None else repo
+            rows = mod.list_inventory_rows()
+            self.load_data(rows)
+        except Exception as e:
+            QtWidgets.QMessageBox.warning(self, "Error BD", f"No se pudo recargar inventario: {e}")
 
     def _apply_filters(self):
         search = (self.search_input.text() or "").strip().lower()
@@ -227,22 +244,10 @@ class ReportesScreen(QtWidgets.QWidget):
     def _on_refresh(self):
         self._load_data()
 
-    def refresh_from_db(self, repo_param=None):
-        """
-        Permite que main_screen llame a refresh desde DB.
-        Se puede pasar el módulo repo como argumento; si no, usa el import actual.
-        """
+    def _reload_from_db(self):
         try:
-            mod = repo_param if repo_param is not None else repo
-            rows = mod.list_inventory_rows()
+            rows = repo.list_inventory_rows()
             self.load_data(rows)
+            self.inventory_changed.emit()
         except Exception as e:
             QtWidgets.QMessageBox.warning(self, "Error BD", f"No se pudo recargar inventario: {e}")
-
-    def load_data(self, rows):
-        """
-        Nueva API: carga filas ya obtenidas para evitar depender de la BD
-        y mantener coherencia con refresh_from_db.
-        """
-        self.all_rows = rows or []
-        self._apply_filters()

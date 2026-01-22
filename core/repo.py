@@ -18,30 +18,30 @@ def create_product(sku: str, name: str, unit: str = None, quality: str = None, d
         session.refresh(prod)
         return prod
 
+def _parse_date(s):
+    if not s:
+        return None
+    try:
+        if isinstance(s, date) and not isinstance(s, datetime):
+            return s
+        if isinstance(s, datetime):
+            return s.date()
+        if isinstance(s, str):
+            if "T" in s:
+                dt = datetime.fromisoformat(s)
+            else:
+                dt = datetime.strptime(s, "%Y-%m-%d")
+            return dt.date()
+        return None
+    except Exception:
+        return None
+
 def create_product_with_inventory(data: dict):
     """
     data: dict con keys mínimas: sku, name, quantity
     y opcionales: unit, quality, largo, ancho, espesor, piezas, prod_date, dispatch_date,
     drying, planing, impregnated, obs, performed_by
     """
-    def parse_date_iso(s):
-        if not s:
-            return None
-        try:
-            if isinstance(s, date) and not isinstance(s, datetime):
-                return s
-            if isinstance(s, datetime):
-                return s.date()
-            if isinstance(s, str):
-                if "T" in s:
-                    dt = datetime.fromisoformat(s)
-                else:
-                    dt = datetime.strptime(s, "%Y-%m-%d")
-                return dt.date()
-            return None
-        except Exception:
-            return None
-
     with SessionLocal() as session:
         try:
             sku = (data.get("sku") or "").strip()
@@ -63,6 +63,7 @@ def create_product_with_inventory(data: dict):
                 session.add(prod)
                 session.flush()
 
+            # Inventario (sin lot_code/location)
             inv = Inventory(
                 product_id=prod.id,
                 quantity=Decimal(str(data.get("quantity") or 0)),
@@ -70,8 +71,8 @@ def create_product_with_inventory(data: dict):
                 ancho=Decimal(str(data.get("ancho"))) if data.get("ancho") is not None else None,
                 espesor=Decimal(str(data.get("espesor"))) if data.get("espesor") is not None else None,
                 piezas=int(data.get("piezas")) if data.get("piezas") is not None else None,
-                prod_date=parse_date_iso(data.get("prod_date")),
-                dispatch_date=parse_date_iso(data.get("dispatch_date")),
+                prod_date=_parse_date(data.get("prod_date")),
+                dispatch_date=_parse_date(data.get("dispatch_date")),
                 quality=data.get("quality"),
                 drying=data.get("drying"),
                 planing=data.get("planing"),
@@ -96,7 +97,7 @@ def create_product_with_inventory(data: dict):
                 session.add(mv)
 
             session.commit()
-            return {"product_id": prod.id, "inventory_id": inv.id}
+            return {"inventory_id": inv.id, "product_id": prod.id}
         except Exception:
             session.rollback()
             raise

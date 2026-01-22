@@ -110,7 +110,7 @@ class MainScreen(QtWidgets.QWidget):
         """
         Persistir en BD y actualizar la vista sin duplicar.
         - Guardar en BD (una única acción).
-        - Recargar inventario y reportes desde BD.
+        - Recargar Inventario y Reportes desde BD.
         """
         try:
             if self.current_user:
@@ -119,7 +119,7 @@ class MainScreen(QtWidgets.QWidget):
             result = repo.create_product_with_inventory(data)
             data["id"] = result.get("inventory_id") or data.get("id")
 
-            # Recargar vistas desde BD (evita duplicación en UI)
+            # Recargar vistas desde BD
             try:
                 self.inventario.refresh_from_db(repo)
             except Exception:
@@ -188,6 +188,3 @@ class MainScreen(QtWidgets.QWidget):
                 self.btn_theme.setText("Tema: Claro")
         else:
             self.btn_theme.setText("Tema")
-
-    def _on_registrar_saved(self, data: dict):
-        pass
