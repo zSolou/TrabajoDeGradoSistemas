@@ -165,7 +165,7 @@ class RegistrarForm(QtWidgets.QWidget):
                 QtWidgets.QMessageBox.warning(self, "Validación", "Complete Largo, Ancho, Espesor y Nº Piezas.")
                 return
             cantidad = self.largo.value() * self.ancho.value() * self.espesor.value() * self.piezas.value()
-            unidad = "m3"
+            unidad = "m3"  # ASCII
         elif tipo == "Machihembrado":
             if any(v <= 0 for v in (self.largo.value(), self.ancho.value())) or self.piezas.value() <= 0:
                 QtWidgets.QMessageBox.warning(self, "Validación", "Complete Largo, Ancho y Nº Piezas.")
@@ -201,6 +201,7 @@ class RegistrarForm(QtWidgets.QWidget):
         self.product_type.setCurrentIndex(0)
         self.sku.clear()
         self.largo.setValue(0)
+        self.mostrar = None  # ajuste menor; si usas otro nombre, quita o ajusta
         self.ancho.setValue(0)
         self.espesor.setValue(0)
         self.piezas.setValue(0)

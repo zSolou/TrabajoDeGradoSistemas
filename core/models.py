@@ -20,7 +20,6 @@ class User(Base):
 
 class Client(Base):
     __tablename__ = "clients"
-
     id = Column(Integer, primary_key=True, index=True)
     name = Column(Text, nullable=False)
     document_id = Column(Text)

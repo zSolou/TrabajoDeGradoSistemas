@@ -67,7 +67,7 @@ class ReportesScreen(QtWidgets.QWidget):
         self.end_date.setVisible(False)
         filt_layout.addWidget(self.end_date)
 
-        # Botón Aplicar (opcional)
+        # Botón Aplicar
         self.apply_btn = QtWidgets.QPushButton("Aplicar")
         filt_layout.addWidget(self.apply_btn)
 
@@ -89,7 +89,7 @@ class ReportesScreen(QtWidgets.QWidget):
             self.chart_label.setAlignment(QtCore.Qt.AlignCenter)
             main.addWidget(self.chart_label)
 
-        # Tabla de detalle (opcional)
+        # Tabla de detalle
         self.table = QtWidgets.QTableWidget(0, 4)
         self.table.setHorizontalHeaderLabels(["SKU","Tipo","Cantidad","Prod_Date"])
         self.table.horizontalHeader().setStretchLastSection(True)
@@ -238,3 +238,11 @@ class ReportesScreen(QtWidgets.QWidget):
             self.load_data(rows)
         except Exception as e:
             QtWidgets.QMessageBox.warning(self, "Error BD", f"No se pudo recargar inventario: {e}")
+
+    def load_data(self, rows):
+        """
+        Nueva API: carga filas ya obtenidas para evitar depender de la BD
+        y mantener coherencia con refresh_from_db.
+        """
+        self.all_rows = rows or []
+        self._apply_filters()

@@ -15,22 +15,18 @@ class MainScreen(QtWidgets.QWidget):
     def __init__(self, parent=None, current_user=None):
         super().__init__(parent)
         self.current_user = current_user
-        # Gestor de tema global
         self.theme_manager = ThemeManager()
         self._build_ui()
 
-        # CRUD dinámico de Inventario (DB) a través de wrappers
         self.inventario.on_create = self._inventario_create
         self.inventario.on_update = self._inventario_update
         self.inventario.on_delete = self._inventario_delete
 
-        # Señal de inventario cambiado (para reporte)
         try:
             self.inventario.inventory_changed.connect(self._on_inventory_changed)
         except Exception:
             pass
 
-        # Señal de registrar
         try:
             self.registrar.saved_signal.connect(self._on_registrar_saved)
         except Exception:
@@ -112,20 +108,18 @@ class MainScreen(QtWidgets.QWidget):
 
     def _on_registrar_saved(self, data: dict):
         """
-        Persistir en BD y actualizar la vista.
-        Plan corto:
+        Persistir en BD y actualizar la vista sin duplicar.
         - Guardar en BD (una única acción).
-        - Recargar inventario y reportes desde BD (evitar duplicados en UI).
+        - Recargar inventario y reportes desde BD.
         """
         try:
             if self.current_user:
                 data["performed_by"] = self.current_user.get("id")
 
-            # Persistir en la BD (única inserción)
             result = repo.create_product_with_inventory(data)
             data["id"] = result.get("inventory_id") or data.get("id")
 
-            # Actualizar vistas sin duplicar entradas en la UI
+            # Recargar vistas desde BD (evita duplicación en UI)
             try:
                 self.inventario.refresh_from_db(repo)
             except Exception:
@@ -142,7 +136,6 @@ class MainScreen(QtWidgets.QWidget):
 
     # CRUD wrappers (Inventario)
     def _inventario_create(self, data: dict):
-        """Crea inventario en DB y devuelve el id de inventario (si aplica)."""
         prod = data.get("prod_date")
         if isinstance(prod, (datetime, date)):
             data["prod_date"] = prod.date().isoformat() if isinstance(prod, datetime) else prod.isoformat()
@@ -160,7 +153,6 @@ class MainScreen(QtWidgets.QWidget):
         return None
 
     def _inventario_update(self, data: dict):
-        """Actualiza inventario en DB."""
         prod = data.get("prod_date")
         if isinstance(prod, (datetime, date)):
             data["prod_date"] = prod.date().isoformat() if isinstance(prod, datetime) else prod.isoformat()
@@ -173,25 +165,21 @@ class MainScreen(QtWidgets.QWidget):
             QtWidgets.QMessageBox.critical(self, "Error BD", f"No se pudo actualizar: {e}")
 
     def _inventario_delete(self, inventory_id: int):
-        """Elimina inventario en DB."""
         try:
             return repo.delete_inventory(inventory_id)
         except Exception as e:
             QtWidgets.QMessageBox.critical(self, "Error BD", f"No se pudo eliminar: {e}")
 
     def _on_inventory_changed(self):
-        """Refresca inventario y reportes ante cambios."""
         self.inventario.refresh_from_db(repo)
         self.reportes.refresh_from_db(repo)
 
     def _on_toggle_theme(self):
-        """Cambiar tema desde la barra lateral."""
         if self.theme_manager:
             self.theme_manager.toggle_theme()
             self._update_theme_label()
 
     def _update_theme_label(self):
-        """Actualiza el texto del botón de tema para reflejar el estado actual."""
         if self.theme_manager:
             current = getattr(self.theme_manager, "current_theme", None)
             if current == self.theme_manager.THEME_DARK:
@@ -201,6 +189,5 @@ class MainScreen(QtWidgets.QWidget):
         else:
             self.btn_theme.setText("Tema")
 
-    # Registrar: ya existente (opcional para consistencia)
     def _on_registrar_saved(self, data: dict):
         pass

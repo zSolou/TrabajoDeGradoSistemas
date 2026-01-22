@@ -63,7 +63,6 @@ def create_product_with_inventory(data: dict):
                 session.add(prod)
                 session.flush()
 
-            # Inventario (sin lot_code/location)
             inv = Inventory(
                 product_id=prod.id,
                 quantity=Decimal(str(data.get("quantity") or 0)),
@@ -152,7 +151,6 @@ def list_inventory_rows():
         def to_date_str(dt):
             if not dt:
                 return ""
-            # DateTime → solo fecha
             return dt.date().isoformat() if hasattr(dt, "date") else dt.isoformat()
 
         result = []
