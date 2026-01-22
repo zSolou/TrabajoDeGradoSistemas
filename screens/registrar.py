@@ -1,7 +1,5 @@
 # screens/registrar.py
 from PySide6 import QtCore, QtWidgets
-from PySide6.QtWidgets import QComboBox, QLineEdit, QDateEdit, QDoubleSpinBox, QSpinBox, QPlainTextEdit
-from PySide6.QtCore import Qt
 
 class RegistrarForm(QtWidgets.QWidget):
     saved_signal = QtCore.Signal(dict)  # emite los datos del producto al guardarse
@@ -167,7 +165,7 @@ class RegistrarForm(QtWidgets.QWidget):
                 QtWidgets.QMessageBox.warning(self, "Validación", "Complete Largo, Ancho, Espesor y Nº Piezas.")
                 return
             cantidad = self.largo.value() * self.ancho.value() * self.espesor.value() * self.piezas.value()
-            unidad = "m³"
+            unidad = "m3"
         elif tipo == "Machihembrado":
             if any(v <= 0 for v in (self.largo.value(), self.ancho.value())) or self.piezas.value() <= 0:
                 QtWidgets.QMessageBox.warning(self, "Validación", "Complete Largo, Ancho y Nº Piezas.")
@@ -195,10 +193,7 @@ class RegistrarForm(QtWidgets.QWidget):
             "obs": self.obs.toPlainText()
         }
 
-        # Emitimos el formulario para que el controlador lo guarde en DB
         self.saved_signal.emit(data)
-
-        # Después de guardar, limpiar formulario
         self._clear_form()
 
     def _clear_form(self):

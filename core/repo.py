@@ -9,7 +9,6 @@ import psycopg2.extras
 import os
 
 # ---------- SQLAlchemy CRUD ----------
-
 def create_product(sku: str, name: str, unit: str = None, quality: str = None, description: str = None):
     with SessionLocal() as session:
         prod = Product(sku=sku, name=name, unit=unit, quality=quality, description=description)
@@ -17,7 +16,7 @@ def create_product(sku: str, name: str, unit: str = None, quality: str = None, d
         session.commit()
         session.refresh(prod)
         return prod
-    
+
 def create_product_with_inventory(data: dict):
     """
     data: dict con keys mínimas: sku, name, quantity
@@ -121,7 +120,6 @@ def insert_inventory(data: dict):
         return inv.id
 
 # ---------- list/inventory ----------
-
 def list_inventory_rows():
     with SessionLocal() as session:
         stmt = (
@@ -313,7 +311,7 @@ def execute_raw(sql: str, params: tuple = None):
     finally:
         conn.close()
 
-# ---------- Autenticación sencilla (texto plano) ----------
+# ---------- Autenticación sencillo (texto plano) ----------
 def create_user_plain(username: str, password: str, full_name: str = None,
                       role: str = "user", email: str = None, active: bool = True):
     """
