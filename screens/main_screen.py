@@ -95,7 +95,6 @@ class MainScreen(QtWidgets.QWidget):
         h.addWidget(sidebar)
         h.addWidget(self.stack, 1)
 
-        # Actualizar etiqueta de tema al iniciar
         self._update_theme_label()
 
     def _on_nav(self):
@@ -109,7 +108,6 @@ class MainScreen(QtWidgets.QWidget):
         Persistir en BD y actualizar la vista.
         """
         try:
-            # Añadir performed_by si tenemos usuario autenticado
             if self.current_user:
                 data["performed_by"] = self.current_user.get("id")
 
@@ -123,7 +121,7 @@ class MainScreen(QtWidgets.QWidget):
 
             # Refrescar desde BD para asegurar consistencia
             try:
-                self.inventario.refresh_from_db(__import__("core.repo", fromlist=["core"]).repo)
+                self.inventario.refresh_from_db(repo)
             except Exception:
                 pass
 
