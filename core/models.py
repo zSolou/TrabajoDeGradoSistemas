@@ -1,6 +1,6 @@
 # core/models.py
 from sqlalchemy import (
-    Column, Integer, String, Text, Boolean, DateTime, Numeric, ForeignKey, JSON
+    Column, Integer, String, Text, Boolean, Date, DateTime, Numeric, ForeignKey, JSON
 )
 from datetime import datetime
 from sqlalchemy.sql import func
@@ -57,8 +57,8 @@ class Inventory(Base):
     espesor = Column(Numeric(10,2))
     piezas = Column(Integer)
 
-    prod_date = Column(DateTime(timezone=True))
-    dispatch_date = Column(DateTime(timezone=True))
+    prod_date = Column(Date)      # <-- cambiado a Date
+    dispatch_date = Column(Date)  # <-- cambiado a Date
 
     quality = Column(String)
     drying = Column(String)

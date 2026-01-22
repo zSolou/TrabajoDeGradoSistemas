@@ -113,32 +113,28 @@ class MainScreen(QtWidgets.QWidget):
     def _on_registrar_saved(self, data: dict):
         """
         Persistir en BD y actualizar la vista.
+        Plan corto:
+        - Guardar en BD (una única acción).
+        - Recargar inventario y reportes desde BD (evitar duplicados en UI).
         """
         try:
             if self.current_user:
                 data["performed_by"] = self.current_user.get("id")
 
-            # Persistir en la BD
+            # Persistir en la BD (única inserción)
             result = repo.create_product_with_inventory(data)
             data["id"] = result.get("inventory_id") or data.get("id")
 
-            # Añadir a la vista local (opcional)
-            if hasattr(self.inventario, "add_row_from_registrar"):
-                self.inventario.add_row_from_registrar(data)
-
-            # Refrescar desde BD para asegurar consistencia
+            # Actualizar vistas sin duplicar entradas en la UI
             try:
                 self.inventario.refresh_from_db(repo)
             except Exception:
                 pass
-
-            # También refrescar reportes
             try:
                 self.reportes.refresh_from_db(repo)
             except Exception:
                 pass
 
-            # Confirmación y navegación a Inventario
             QtWidgets.QMessageBox.information(self, "Registro exitoso", f"Producto {data.get('sku')} registrado correctamente.")
             self.stack.setCurrentIndex(0)
         except Exception as e:

@@ -7,6 +7,7 @@ from .models import Client, User, Product, Inventory, Movement
 import psycopg2
 import psycopg2.extras
 import os
+from datetime import datetime, date
 
 # ---------- SQLAlchemy CRUD ----------
 def create_product(sku: str, name: str, unit: str = None, quality: str = None, description: str = None):
@@ -23,17 +24,21 @@ def create_product_with_inventory(data: dict):
     y opcionales: unit, quality, largo, ancho, espesor, piezas, prod_date, dispatch_date,
     drying, planing, impregnated, obs, performed_by
     """
-    from datetime import datetime
     def parse_date_iso(s):
         if not s:
             return None
-        # Qt ISODate: 'YYYY-MM-DD' o 'YYYY-MM-DDThh:mm:ss'
         try:
-            if isinstance(s, datetime):
+            if isinstance(s, date) and not isinstance(s, datetime):
                 return s
-            if "T" in s:
-                return datetime.fromisoformat(s)
-            return datetime.strptime(s, "%Y-%m-%d")
+            if isinstance(s, datetime):
+                return s.date()
+            if isinstance(s, str):
+                if "T" in s:
+                    dt = datetime.fromisoformat(s)
+                else:
+                    dt = datetime.strptime(s, "%Y-%m-%d")
+                return dt.date()
+            return None
         except Exception:
             return None
 
@@ -101,7 +106,7 @@ def insert_inventory(data: dict):
     with SessionLocal() as session:
         inv = Inventory(
             product_id=data.get("product_id"),
-            quantity=data.get("quantity"),
+            quantity=Decimal(str(data.get("quantity") or 0)),
             largo=data.get("largo"),
             ancho=data.get("ancho"),
             espesor=data.get("espesor"),
@@ -289,13 +294,11 @@ def delete_client(client_id: int):
                     session.delete(client)
                     session.commit()
 
-
 # ---------- psycopg2 helper (ejecuciones crudas) ----------
 def get_psycopg2_conn():
-    # lee la URL desde la variable de entorno DATABASE_URL_PG o usa la de SQLAlchemy sin el driver prefix
-    url = os.getenv("postgresql+psycopg2://postgres@localhost:5432/astillados_db")  # ejemplo: postgresql://user:pass@host:port/db
+    url = os.getenv("DATABASE_URL_PG")  # Use env var to keep it flexible
     if not url:
-        raise RuntimeError("Define DATABASE_URL_PG en variables de entorno para usar psycopg2 helper")
+        url = "postgresql://postgres@localhost:5432/astillados_db"
     return psycopg2.connect(url, cursor_factory=psycopg2.extras.RealDictCursor)
 
 def execute_raw(sql: str, params: tuple = None):
