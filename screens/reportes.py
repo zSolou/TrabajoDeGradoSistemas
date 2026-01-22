@@ -117,7 +117,6 @@ class ReportesScreen(QtWidgets.QWidget):
         self._apply_filters()
 
     def _apply_filters(self):
-        import datetime as _dt
         search = (self.search_input.text() or "").strip().lower()
         category = self.category_cb.currentText()
         date_filter = self.date_cb.currentText()
@@ -127,10 +126,10 @@ class ReportesScreen(QtWidgets.QWidget):
         end = None
         if date_filter == "Semana":
             end = date.today()
-            start = end - _dt.timedelta(days=7)
+            start = end - timedelta(days=7)
         elif date_filter == "Mes":
             end = date.today()
-            start = end - _dt.timedelta(days=30)
+            start = end - timedelta(days=30)
         elif date_filter == "Personalizado":
             start_qd = self.start_date.date()
             end_qd = self.end_date.date()
@@ -227,7 +226,15 @@ class ReportesScreen(QtWidgets.QWidget):
 
     def _on_refresh(self):
         self._load_data()
-    
-    def refresh_from_db(self):
-        # Permite que main_screen llame a repo/list_inventory_rows desde DB
-        self._load_data()
+
+    def refresh_from_db(self, repo_param=None):
+        """
+        Permite que main_screen llame a refresh desde DB.
+        Se puede pasar el módulo repo como argumento; si no, usa el import actual.
+        """
+        try:
+            mod = repo_param if repo_param is not None else repo
+            rows = mod.list_inventory_rows()
+            self.load_data(rows)
+        except Exception as e:
+            QtWidgets.QMessageBox.warning(self, "Error BD", f"No se pudo recargar inventario: {e}")

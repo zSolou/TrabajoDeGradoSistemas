@@ -138,7 +138,8 @@ class MainScreen(QtWidgets.QWidget):
             except Exception:
                 pass
 
-            # Cambiar a inventario
+            # Confirmación y navegación a Inventario
+            QtWidgets.QMessageBox.information(self, "Registro exitoso", f"Producto {data.get('sku')} registrado correctamente.")
             self.stack.setCurrentIndex(0)
         except Exception as e:
             QtWidgets.QMessageBox.critical(self, "Error al guardar", f"No se pudo guardar en la base de datos: {e}")

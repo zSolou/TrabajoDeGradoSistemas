@@ -156,7 +156,7 @@ class RegistrarForm(QtWidgets.QWidget):
 
     def _on_save(self):
         tipo = self.product_type.currentText().strip()
-        if tipo not in ("Tablas", "Machihembrado", "Tablones", "Paletas"):
+        if tipo not in ("Tablas","Machihembrado","Tablones","Paletas"):
             QtWidgets.QMessageBox.warning(self, "Validación", "Seleccione el tipo de producto.")
             return
 
@@ -215,9 +215,6 @@ class RegistrarForm(QtWidgets.QWidget):
         self.impregnated.setCurrentIndex(0)
         self.obs.clear()
         self.form_container.setVisible(False)
-
-    def _on_cancel(self):
-        self.reject()
 
     def _generate_sku(self, base: str) -> str:
         base_clean = "".join(ch for ch in base.upper() if ch.isalnum())[:10]
