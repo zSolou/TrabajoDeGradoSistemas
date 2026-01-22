@@ -19,7 +19,7 @@ class MainScreen(QtWidgets.QWidget):
         self.theme_manager = ThemeManager()
         self._build_ui()
 
-        # Conectar CRUD de Inventario (DB) a través de wrappers
+        # CRUD dinámico de Inventario (DB) a través de wrappers
         self.inventario.on_create = self._inventario_create
         self.inventario.on_update = self._inventario_update
         self.inventario.on_delete = self._inventario_delete
@@ -30,7 +30,7 @@ class MainScreen(QtWidgets.QWidget):
         except Exception:
             pass
 
-        # Señales para registrar
+        # Señal de registrar
         try:
             self.registrar.saved_signal.connect(self._on_registrar_saved)
         except Exception:
@@ -132,6 +132,12 @@ class MainScreen(QtWidgets.QWidget):
             except Exception:
                 pass
 
+            # También refrescar reportes
+            try:
+                self.reportes.refresh_from_db(repo)
+            except Exception:
+                pass
+
             # Cambiar a inventario
             self.stack.setCurrentIndex(0)
         except Exception as e:
@@ -178,14 +184,8 @@ class MainScreen(QtWidgets.QWidget):
 
     def _on_inventory_changed(self):
         """Refresca inventario y reportes ante cambios."""
-        try:
-            self.inventario.refresh_from_db(repo)
-        except Exception:
-            pass
-        try:
-            self.reportes.refresh_from_db(repo)
-        except Exception:
-            pass
+        self.inventario.refresh_from_db(repo)
+        self.reportes.refresh_from_db(repo)
 
     def _on_toggle_theme(self):
         """Cambiar tema desde la barra lateral."""

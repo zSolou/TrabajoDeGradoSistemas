@@ -1,5 +1,7 @@
 # screens/registrar.py
 from PySide6 import QtCore, QtWidgets
+from PySide6.QtWidgets import QComboBox, QLineEdit, QDateEdit, QDoubleSpinBox, QSpinBox, QPlainTextEdit
+from PySide6.QtCore import Qt
 
 class RegistrarForm(QtWidgets.QWidget):
     saved_signal = QtCore.Signal(dict)  # emite los datos del producto al guardarse
@@ -14,7 +16,7 @@ class RegistrarForm(QtWidgets.QWidget):
         main.setContentsMargins(12, 12, 12, 12)
         main.setSpacing(10)
 
-        # --- Encabezado: título a la izquierda, selector de tipo a la derecha ---
+        # Encabezado: título a la izquierda, selector de tipo a la derecha
         header = QtWidgets.QWidget()
         header_layout = QtWidgets.QHBoxLayout(header)
         header_layout.setContentsMargins(0, 0, 0, 0)
@@ -35,7 +37,7 @@ class RegistrarForm(QtWidgets.QWidget):
 
         main.addWidget(header)
 
-        # --- Contenedor del formulario dinámico (todo oculto hasta seleccionar tipo) ---
+        # Contenedor del formulario dinámico (todo oculto hasta seleccionar tipo)
         self.form_container = QtWidgets.QWidget()
         form_layout = QtWidgets.QFormLayout(self.form_container)
         form_layout.setLabelAlignment(QtCore.Qt.AlignLeft)
@@ -93,7 +95,7 @@ class RegistrarForm(QtWidgets.QWidget):
         self.row_obs = self._add_form_row(form_layout, "Observación", self.obs)
 
         # Inicialmente ocultamos el contenedor completo (hasta seleccionar tipo)
-        self.form_container.setVisible(False)
+        self.form_container.setVisible(True)
         main.addWidget(self.form_container)
 
         # Botón guardar (debajo del formulario)
@@ -107,6 +109,7 @@ class RegistrarForm(QtWidgets.QWidget):
 
         # Conectar selector para mostrar/ocultar y reordenar visualmente
         self.product_type.currentTextChanged.connect(self._on_product_change)
+        self._on_product_change(self.product_type.currentText())
 
     def _add_form_row(self, layout, label_text, widget):
         """Helper: añade una fila al form layout y devuelve el widget contenedor (para visibilidad)."""
@@ -159,7 +162,7 @@ class RegistrarForm(QtWidgets.QWidget):
 
         sku = self.sku.text().strip() or self._generate_sku(tipo)
 
-        if tipo in ("Tablas", "Tablones", "Paletas"):
+        if tipo in ("Tablas","Tablones","Paletas"):
             if any(v <= 0 for v in (self.largo.value(), self.ancho.value(), self.espesor.value())) or self.piezas.value() <= 0:
                 QtWidgets.QMessageBox.warning(self, "Validación", "Complete Largo, Ancho, Espesor y Nº Piezas.")
                 return
@@ -192,15 +195,14 @@ class RegistrarForm(QtWidgets.QWidget):
             "obs": self.obs.toPlainText()
         }
 
-        try:
-            self.saved_signal.emit(data)
-        except Exception:
-            pass
+        # Emitimos el formulario para que el controlador lo guarde en DB
+        self.saved_signal.emit(data)
 
-        QtWidgets.QMessageBox.information(self, "Guardado", "Producto registrado correctamente.")
+        # Después de guardar, limpiar formulario
         self._clear_form()
 
     def _clear_form(self):
+        """Resetea el formulario para registrar un nuevo producto."""
         self.product_type.setCurrentIndex(0)
         self.sku.clear()
         self.largo.setValue(0)
@@ -213,6 +215,9 @@ class RegistrarForm(QtWidgets.QWidget):
         self.impregnated.setCurrentIndex(0)
         self.obs.clear()
         self.form_container.setVisible(False)
+
+    def _on_cancel(self):
+        self.reject()
 
     def _generate_sku(self, base: str) -> str:
         base_clean = "".join(ch for ch in base.upper() if ch.isalnum())[:10]

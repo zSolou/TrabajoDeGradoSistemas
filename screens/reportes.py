@@ -89,13 +89,15 @@ class ReportesScreen(QtWidgets.QWidget):
             self.chart_label.setAlignment(QtCore.Qt.AlignCenter)
             main.addWidget(self.chart_label)
 
-        # Tabla de detalle
+        # Tabla de detalle (opcional)
         self.table = QtWidgets.QTableWidget(0, 4)
         self.table.setHorizontalHeaderLabels(["SKU","Tipo","Cantidad","Prod_Date"])
         self.table.horizontalHeader().setStretchLastSection(True)
         self.table.verticalHeader().setVisible(False)
         self.table.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
         main.addWidget(self.table)
+
+        self.setMinimumHeight(600)
 
     def _on_date_changed(self, text):
         if text == "Personalizado":
@@ -115,6 +117,7 @@ class ReportesScreen(QtWidgets.QWidget):
         self._apply_filters()
 
     def _apply_filters(self):
+        import datetime as _dt
         search = (self.search_input.text() or "").strip().lower()
         category = self.category_cb.currentText()
         date_filter = self.date_cb.currentText()
@@ -124,10 +127,10 @@ class ReportesScreen(QtWidgets.QWidget):
         end = None
         if date_filter == "Semana":
             end = date.today()
-            start = end - timedelta(days=7)
+            start = end - _dt.timedelta(days=7)
         elif date_filter == "Mes":
             end = date.today()
-            start = end - timedelta(days=30)
+            start = end - _dt.timedelta(days=30)
         elif date_filter == "Personalizado":
             start_qd = self.start_date.date()
             end_qd = self.end_date.date()
@@ -136,28 +139,22 @@ class ReportesScreen(QtWidgets.QWidget):
 
         filtered = []
         for r in self.all_rows:
-            # Filtro por tipo
             if category != "Todos" and r.get("product_type") != category:
                 continue
 
-            # Filtro por búsqueda
             sku = r.get("sku","")
             tipo = r.get("product_type","")
             combined = f"{sku} {tipo}".lower()
             if search and search not in combined:
                 continue
 
-            # Filtro por fecha
             prod_date_str = r.get("prod_date","")
             prod_date = None
             if prod_date_str:
-                if isinstance(prod_date_str, date):
-                    prod_date = prod_date_str
-                else:
-                    try:
-                        prod_date = date.fromisoformat(prod_date_str)
-                    except Exception:
-                        prod_date = None
+                try:
+                    prod_date = date.fromisoformat(prod_date_str)
+                except Exception:
+                    prod_date = None
             else:
                 prod_date = None
 
@@ -170,7 +167,6 @@ class ReportesScreen(QtWidgets.QWidget):
 
             filtered.append(r)
 
-        # Actualizar tabla de detalle
         self.table.setRowCount(0)
         for row in filtered:
             self._add_table_row([
@@ -180,7 +176,6 @@ class ReportesScreen(QtWidgets.QWidget):
                 row.get("prod_date","")
             ])
 
-        # Preparar datos para la gráfica
         totals = {"Tablas":0.0, "Machihembrado":0.0, "Tablones":0.0, "Paletas":0.0}
         for row in filtered:
             t = row.get("product_type","")
@@ -219,8 +214,8 @@ class ReportesScreen(QtWidgets.QWidget):
 
             for i, w in enumerate(wedges):
                 theta = (w.theta2 + w.theta1) / 2.0
-                x = math.cos(math.radians(theta)) * 0.55
-                y = math.sin(math.radians(theta)) * 0.55
+                x = math.cos(math.radians(theta)) * 0.6
+                y = math.sin(math.radians(theta)) * 0.6
                 percent = (values[i] / total) * 100 if total > 0 else 0
                 label_text = f"{labels[i]} {percent:.1f}%"
                 ax.text(x, y, label_text, fontsize=9, color="#e6eef8",
@@ -231,4 +226,8 @@ class ReportesScreen(QtWidgets.QWidget):
             self.canvas.draw()
 
     def _on_refresh(self):
+        self._load_data()
+    
+    def refresh_from_db(self):
+        # Permite que main_screen llame a repo/list_inventory_rows desde DB
         self._load_data()
