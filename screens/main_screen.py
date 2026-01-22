@@ -1,6 +1,7 @@
 # screens/main_screen.py
 from PySide6 import QtCore, QtGui, QtWidgets
 from datetime import datetime, date
+
 from screens.inventario import InventarioScreen
 from screens.registrar import RegistrarForm
 from screens.reportes import ReportesScreen
@@ -23,7 +24,13 @@ class MainScreen(QtWidgets.QWidget):
         self.inventario.on_update = self._inventario_update
         self.inventario.on_delete = self._inventario_delete
 
-        # Señal de registrar (persistencia y actualización de UI)
+        # Señal de inventario cambiado (para reporte)
+        try:
+            self.inventario.inventory_changed.connect(self._on_inventory_changed)
+        except Exception:
+            pass
+
+        # Señales para registrar
         try:
             self.registrar.saved_signal.connect(self._on_registrar_saved)
         except Exception:
@@ -60,7 +67,7 @@ class MainScreen(QtWidgets.QWidget):
             self.buttons[name] = btn
 
         # Botón de tema (dinámico)
-        self.btn_theme = QtWidgets.QPushButton()
+        self.btn_theme = QtWidgets.QPushButton("")
         self.btn_theme.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
         self.btn_theme.setStyleSheet("background: none; color: #e6eef8; text-align:left; padding-left:8px;")
         self.btn_theme.setFixedHeight(36)
@@ -130,44 +137,15 @@ class MainScreen(QtWidgets.QWidget):
         except Exception as e:
             QtWidgets.QMessageBox.critical(self, "Error al guardar", f"No se pudo guardar en la base de datos: {e}")
 
-    def _on_toggle_theme(self):
-        """Toggle theme using ThemeManager and refresh label."""
-        try:
-            if self.theme_manager:
-                self.theme_manager.toggle_theme()
-                self._update_theme_label()
-        except Exception as e:
-            QtWidgets.QMessageBox.warning(self, "Error", f"No se pudo cambiar el tema: {e}")
-
-    def _update_theme_label(self):
-        """Actualiza el texto del botón de tema para reflejar el estado actual."""
-        try:
-            if self.theme_manager:
-                current = getattr(self.theme_manager, "current_theme", None)
-                if current == self.theme_manager.THEME_DARK:
-                    self.btn_theme.setText("Tema: Oscuro")
-                else:
-                    self.btn_theme.setText("Tema: Claro")
-            else:
-                self.btn_theme.setText("Tema")
-        except Exception:
-            self.btn_theme.setText("Tema")
-
-    # --- CRUD wrappers para Inventario (conexión DB) ---
+    # CRUD wrappers (Inventario)
     def _inventario_create(self, data: dict):
         """Crea inventario en DB y devuelve el id de inventario (si aplica)."""
         prod = data.get("prod_date")
         if isinstance(prod, (datetime, date)):
-            if isinstance(prod, datetime):
-                data["prod_date"] = prod.date().isoformat()
-            else:
-                data["prod_date"] = prod.isoformat()
+            data["prod_date"] = prod.date().isoformat() if isinstance(prod, datetime) else prod.isoformat()
         disp = data.get("dispatch_date")
         if isinstance(disp, (datetime, date)):
-            if isinstance(disp, datetime):
-                data["dispatch_date"] = disp.date().isoformat()
-            else:
-                data["dispatch_date"] = disp.isoformat()
+            data["dispatch_date"] = disp.date().isoformat() if isinstance(disp, datetime) else disp.isoformat()
 
         resp = repo.create_product_with_inventory(data)
         if isinstance(resp, dict):
@@ -187,13 +165,45 @@ class MainScreen(QtWidgets.QWidget):
         if isinstance(disp, (datetime, date)):
             data["dispatch_date"] = disp.date().isoformat() if isinstance(disp, datetime) else disp.isoformat()
         try:
-            repo.update_inventory(data)
+            return repo.update_inventory(data)
         except Exception as e:
             QtWidgets.QMessageBox.critical(self, "Error BD", f"No se pudo actualizar: {e}")
 
     def _inventario_delete(self, inventory_id: int):
-        """Elimina inventario de DB."""
+        """Elimina inventario en DB."""
         try:
-            repo.delete_inventory(inventory_id)
+            return repo.delete_inventory(inventory_id)
         except Exception as e:
             QtWidgets.QMessageBox.critical(self, "Error BD", f"No se pudo eliminar: {e}")
+
+    def _on_inventory_changed(self):
+        """Refresca inventario y reportes ante cambios."""
+        try:
+            self.inventario.refresh_from_db(repo)
+        except Exception:
+            pass
+        try:
+            self.reportes.refresh_from_db(repo)
+        except Exception:
+            pass
+
+    def _on_toggle_theme(self):
+        """Cambiar tema desde la barra lateral."""
+        if self.theme_manager:
+            self.theme_manager.toggle_theme()
+            self._update_theme_label()
+
+    def _update_theme_label(self):
+        """Actualiza el texto del botón de tema para reflejar el estado actual."""
+        if self.theme_manager:
+            current = getattr(self.theme_manager, "current_theme", None)
+            if current == self.theme_manager.THEME_DARK:
+                self.btn_theme.setText("Tema: Oscuro")
+            else:
+                self.btn_theme.setText("Tema: Claro")
+        else:
+            self.btn_theme.setText("Tema")
+
+    # Registrar: ya existente (opcional para consistencia)
+    def _on_registrar_saved(self, data: dict):
+        pass

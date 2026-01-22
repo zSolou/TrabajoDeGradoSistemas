@@ -101,7 +101,7 @@ class InventarioScreen(QtWidgets.QWidget):
             QtWidgets.QMessageBox.critical(self, "Error BD", f"No se pudo eliminar: {e}")
             return
 
-        # Refrescar desde DB para reflejar el cambio
+        # Refrescar desde BD para reflejar el cambio
         self._reload_from_db()
         QtWidgets.QMessageBox.information(self, "Eliminado", "Producto eliminado correctamente.")
     
@@ -323,6 +323,7 @@ class InventarioScreen(QtWidgets.QWidget):
         except Exception as e:
             QtWidgets.QMessageBox.warning(self, "Error BD", f"No se pudo recargar inventario: {e}")
 
+
 class InventarioDialog(QtWidgets.QDialog):
     def __init__(self, parent=None, data=None):
         super().__init__(parent)
@@ -414,15 +415,35 @@ class InventarioDialog(QtWidgets.QDialog):
         self.input_espesor.setValue(float(data.get("espesor") or 0))
         self.input_piezas.setValue(int(data.get("piezas") or 0))
 
-        def set_qdate(widget, s):
-            if not s:
-                return
-            qd = QtCore.QDate.fromString(s, QtCore.Qt.ISODate)
-            if qd.isValid():
-                widget.setDate(qd)
+        # Conversión robusta de fechas para setDate
+        def to_qdate(value):
+            if value is None or value == "":
+                return None
+            if isinstance(value, QtCore.QDate):
+                return value
+            if isinstance(value, datetime):
+                return QtCore.QDate(value.year, value.month, value.day)
+            if isinstance(value, date):
+                return QtCore.QDate(value.year, value.month, value.day)
+            if isinstance(value, str):
+                qd = QtCore.QDate.fromString(value, QtCore.Qt.ISODate)
+                if qd.isValid():
+                    return qd
+                # Intentar parsear ISO con datetime
+                try:
+                    dt = datetime.fromisoformat(value)
+                    return QtCore.QDate(dt.year, dt.month, dt.day)
+                except Exception:
+                    return None
+            return None
 
-        set_qdate(self.input_prod_date, data.get("prod_date", ""))
-        set_qdate(self.input_dispatch_date, data.get("dispatch_date", ""))
+        qdate_prod = to_qdate(data.get("prod_date"))
+        if qdate_prod:
+            self.input_prod_date.setDate(qdate_prod)
+
+        qdate_dispatch = to_qdate(data.get("dispatch_date"))
+        if qdate_dispatch:
+            self.input_dispatch_date.setDate(qdate_dispatch)
 
         self.input_quality.setCurrentText(data.get("quality", ""))
         self.input_drying.setCurrentText(data.get("drying", ""))
@@ -465,6 +486,10 @@ class InventarioDialog(QtWidgets.QDialog):
         prod_dt = self._to_datetime(prod_q)
         disp_dt = self._to_datetime(dispatch_q)
 
+        # Convertir fechas a ISO string para DB (YYYY-MM-DD)
+        prod_date_str = self.input_prod_date.date().toString(QtCore.Qt.ISODate)
+        dispatch_date_str = self.input_dispatch_date.date().toString(QtCore.Qt.ISODate)
+
         return {
             "sku": self.input_sku.text().strip(),
             "product_type": self.input_type.currentText(),
@@ -477,9 +502,9 @@ class InventarioDialog(QtWidgets.QDialog):
             "espesor": float(self.input_espesor.value()),
             "piezas": int(self.input_piezas.value()),
 
-            # Fechas
-            "prod_date": prod_dt,
-            "dispatch_date": disp_dt,
+            # Fechas (ISO string)
+            "prod_date": prod_date_str,
+            "dispatch_date": dispatch_date_str,
 
             # Otros atributos
             "quality": self.input_quality.currentText(),

@@ -1,7 +1,6 @@
 # screens/reportes.py
 from PySide6 import QtCore, QtWidgets
 from datetime import date, timedelta
-import sys
 import math
 
 # Intentar cargar matplotlib para la gráfica (pie chart)
@@ -68,7 +67,7 @@ class ReportesScreen(QtWidgets.QWidget):
         self.end_date.setVisible(False)
         filt_layout.addWidget(self.end_date)
 
-        # Botón Aplicar (opcional, para forzar filtrado)
+        # Botón Aplicar (opcional)
         self.apply_btn = QtWidgets.QPushButton("Aplicar")
         filt_layout.addWidget(self.apply_btn)
 
@@ -90,7 +89,7 @@ class ReportesScreen(QtWidgets.QWidget):
             self.chart_label.setAlignment(QtCore.Qt.AlignCenter)
             main.addWidget(self.chart_label)
 
-        # Tabla de detalle (opcional, ayuda a depurar)
+        # Tabla de detalle
         self.table = QtWidgets.QTableWidget(0, 4)
         self.table.setHorizontalHeaderLabels(["SKU","Tipo","Cantidad","Prod_Date"])
         self.table.horizontalHeader().setStretchLastSection(True)
@@ -150,11 +149,15 @@ class ReportesScreen(QtWidgets.QWidget):
 
             # Filtro por fecha
             prod_date_str = r.get("prod_date","")
+            prod_date = None
             if prod_date_str:
-                try:
-                    prod_date = date.fromisoformat(prod_date_str)
-                except Exception:
-                    prod_date = None
+                if isinstance(prod_date_str, date):
+                    prod_date = prod_date_str
+                else:
+                    try:
+                        prod_date = date.fromisoformat(prod_date_str)
+                    except Exception:
+                        prod_date = None
             else:
                 prod_date = None
 
@@ -200,7 +203,6 @@ class ReportesScreen(QtWidgets.QWidget):
         if not MATPLOTLIB_AVAILABLE:
             return
 
-        # Filtrar solo valores > 0
         items = [(k, v) for k, v in data_by_type.items() if v is not None and v > 0]
         self.figure.clear()
         ax = self.figure.add_subplot(111)
@@ -215,11 +217,10 @@ class ReportesScreen(QtWidgets.QWidget):
             colors = ['#4e79a7', '#f28e2b', '#e15759', '#76b7b2'][:len(values)]
             wedges, _ = ax.pie(values, labels=None, startangle=90, colors=colors)
 
-            # Etiquetas dentro de cada porción
             for i, w in enumerate(wedges):
                 theta = (w.theta2 + w.theta1) / 2.0
-                x = math.cos(math.radians(theta)) * 0.6
-                y = math.sin(math.radians(theta)) * 0.6
+                x = math.cos(math.radians(theta)) * 0.55
+                y = math.sin(math.radians(theta)) * 0.55
                 percent = (values[i] / total) * 100 if total > 0 else 0
                 label_text = f"{labels[i]} {percent:.1f}%"
                 ax.text(x, y, label_text, fontsize=9, color="#e6eef8",
@@ -228,3 +229,6 @@ class ReportesScreen(QtWidgets.QWidget):
             ax.axis('equal')
         if MATPLOTLIB_AVAILABLE and hasattr(self, "canvas"):
             self.canvas.draw()
+
+    def _on_refresh(self):
+        self._load_data()
