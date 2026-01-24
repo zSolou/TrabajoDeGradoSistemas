@@ -2,9 +2,27 @@
 from typing import Optional
 from PySide6 import QtWidgets
 from PySide6.QtCore import QSettings
-from core.styles import DARK_THEME, LIGHT_THEME
+
+# Intentamos importar los estilos, si no existen, definimos unos vacíos para que no falle
+try:
+    from core.styles import DARK_THEME, LIGHT_THEME
+except ImportError:
+    DARK_THEME = ""
+    LIGHT_THEME = ""
+
+# --- 1. CONSTANTES DE COLOR (Necesarias para main_screen.py) ---
+# Estas son las variables que causaban el error al faltar
+BG_MAIN = "#1e1e2f"       # Fondo principal
+BG_SIDEBAR = "#27293d"    # Fondo menú lateral
+BG_INPUT = "#2b3553"      # Fondo inputs
+TEXT_PRIMARY = "#ffffff"  # Texto blanco
+TEXT_SECONDARY = "#a9a9b3" # Texto gris
+ACCENT_COLOR = "#32D424"  # Color de acento (verde como tu título)
+HOVER_SIDEBAR = "rgba(255, 255, 255, 0.1)" # Efecto hover
+# ---------------------------------------------------------------
 
 
+# --- 2. TU CLASE THEME MANAGER (Original) ---
 class ThemeManager:
     """
     Centraliza el manejo de tema (Oscuro/Claro) para la app PySide6.

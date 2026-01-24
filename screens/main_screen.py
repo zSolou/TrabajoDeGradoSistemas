@@ -1,190 +1,173 @@
-# screens/main_screen.py
-from PySide6 import QtCore, QtGui, QtWidgets
-from datetime import datetime, date
-
+from PySide6 import QtCore, QtWidgets, QtGui
 from screens.inventario import InventarioScreen
 from screens.registrar import RegistrarForm
 from screens.reportes import ReportesScreen
-from screens.manual import ManualScreen
 from screens.clientes import ClientesScreen
-import core.repo as repo
-from core.theme import ThemeManager
+from screens.manual import ManualScreen
+from screens.respaldo import RespaldoScreen  # <--- 1. IMPORTAMOS LA NUEVA PANTALLA
 
+from core import theme
+
+# En screens/main_screen.py
 
 class MainScreen(QtWidgets.QWidget):
-    def __init__(self, parent=None, current_user=None):
-        super().__init__(parent)
-        self.current_user = current_user
-        self.theme_manager = ThemeManager()
-        self._build_ui()
+    # CORRECCIÓN: Cambiamos 'auth_data' por 'current_user'
+    def __init__(self, current_user=None): 
+        super().__init__()
+        # Guardamos el usuario en self.auth_data para usarlo en el resto de la clase
+        self.auth_data = current_user 
+        self._setup_ui()
+        self._connect_signals()
 
-        self.inventario.on_create = self._inventario_create
-        self.inventario.on_update = self._inventario_update
-        self.inventario.on_delete = self._inventario_delete
+    def _setup_ui(self):
+        # Layout principal horizontal (Menú lateral + Contenido)
+        main_layout = QtWidgets.QHBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
 
-        try:
-            self.inventario.inventory_changed.connect(self._on_inventory_changed)
-        except Exception:
-            pass
+        # --- MENÚ LATERAL ---
+        self.side_menu = QtWidgets.QFrame()
+        self.side_menu.setStyleSheet(f"background-color: {theme.BG_SIDEBAR};")
+        self.side_menu.setFixedWidth(240)
+        
+        menu_layout = QtWidgets.QVBoxLayout(self.side_menu)
+        menu_layout.setContentsMargins(10, 20, 10, 20)
+        menu_layout.setSpacing(10)
 
-        try:
-            self.registrar.saved_signal.connect(self._on_registrar_saved)
-        except Exception:
-            pass
+        # Logo / Título
+        title = QtWidgets.QLabel("SERVICIOS Y\nASTILLADOS DEL SUR")
+        title.setStyleSheet("color: white; font-weight: bold; font-size: 11pt;")
+        title.setAlignment(QtCore.Qt.AlignLeft)
+        menu_layout.addWidget(title)
+        menu_layout.addSpacing(20)
 
-        self._update_theme_label()
+        # Botones de Navegación
+        self.btn_inv = self._create_nav_button("INVENTARIO", "inventory")
+        self.btn_reg = self._create_nav_button("REGISTRAR", "add")
+        self.btn_rep = self._create_nav_button("REPORTES", "chart")
+        self.btn_cli = self._create_nav_button("CLIENTES", "group")
+        
+        # --- 2. BOTÓN DE RESPALDO (Debajo de Clientes) ---
+        # Usamos un icono genérico 'save' o texto si no tienes iconos
+        self.btn_res = self._create_nav_button("RESPALDO", "save") 
+        # --------------------------------------------------
 
-    def _build_ui(self):
-        h = QtWidgets.QHBoxLayout(self)
-        h.setContentsMargins(0, 0, 0, 0)
+        self.btn_man = self._create_nav_button("MANUAL", "help")
 
-        # Sidebar
-        sidebar = QtWidgets.QFrame()
-        sidebar.setFixedWidth(220)
-        sidebar.setStyleSheet("background: qlineargradient(x1:0,y1:0,x2:1,y2:0, stop:0 #0f1720, stop:1 #111827);")
-        side_layout = QtWidgets.QVBoxLayout(sidebar)
-        side_layout.setContentsMargins(12,12,12,12)
+        menu_layout.addWidget(self.btn_inv)
+        menu_layout.addWidget(self.btn_reg)
+        menu_layout.addWidget(self.btn_rep)
+        menu_layout.addWidget(self.btn_cli)
+        menu_layout.addWidget(self.btn_res) # <--- Agregamos al layout
+        menu_layout.addWidget(self.btn_man)
 
-        logo_lbl = QtWidgets.QLabel("SERVICIOS Y\nASTILLADOS DEL SUR")
-        logo_lbl.setStyleSheet("color:#e6eef8; font-weight:700;")
-        side_layout.addWidget(logo_lbl)
-        side_layout.addSpacing(12)
+        menu_layout.addStretch()
 
-        # Botones
-        self.buttons = {}
-        sections = ["INVENTARIO","REGISTRAR","REPORTES","CLIENTES","MANUAL"]
-        for name in sections:
-            btn = QtWidgets.QPushButton(name)
-            btn.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
-            btn.setStyleSheet("background: none; color: #e6eef8; text-align:left; padding-left:8px;")
-            btn.setFixedHeight(36)
-            btn.clicked.connect(self._on_nav)
-            side_layout.addWidget(btn)
-            self.buttons[name] = btn
+        # Footer del menú (Usuario / Tema)
+        self.lbl_user = QtWidgets.QLabel(f"Usuario: {self.auth_data.get('username','Guest')}" if self.auth_data else "")
+        self.lbl_user.setStyleSheet("color: #888; font-size: 9pt;")
+        menu_layout.addWidget(self.lbl_user)
+        
+        self.theme_switch = QtWidgets.QLabel("Tema: Oscuro")
+        self.theme_switch.setStyleSheet("color: #aaa;")
+        menu_layout.addWidget(self.theme_switch)
 
-        # Botón de tema (dinámico)
-        self.btn_theme = QtWidgets.QPushButton("")
-        self.btn_theme.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
-        self.btn_theme.setStyleSheet("background: none; color: #e6eef8; text-align:left; padding-left:8px;")
-        self.btn_theme.setFixedHeight(36)
-        self.btn_theme.clicked.connect(self._on_toggle_theme)
-        side_layout.addWidget(self.btn_theme)
+        main_layout.addWidget(self.side_menu)
 
-        side_layout.addStretch(1)
+        # --- ÁREA DE CONTENIDO (STACK) ---
+        self.content_area = QtWidgets.QFrame()
+        self.content_area.setStyleSheet(f"background-color: {theme.BG_MAIN};")
+        content_layout = QtWidgets.QVBoxLayout(self.content_area)
+        content_layout.setContentsMargins(0, 0, 0, 0)
 
-        # Centro (Stack)
         self.stack = QtWidgets.QStackedWidget()
+        
+        # Instanciar Pantallas
+        self.inv_screen = InventarioScreen()
+        self.reg_screen = RegistrarForm()
+        self.rep_screen = ReportesScreen()
+        self.cli_screen = ClientesScreen()
+        self.res_screen = RespaldoScreen() # <--- 3. INSTANCIAMOS LA PANTALLA
+        self.man_screen = ManualScreen()
 
-        # Crear instancias y guardarlas
-        self.inventario = InventarioScreen()
-        self.registrar = RegistrarForm()
-        self.reportes = ReportesScreen()
-        self.clientes = ClientesScreen()
-        self.manual = ManualScreen()
+        # Agregar al Stack en orden
+        self.stack.addWidget(self.inv_screen) # Index 0
+        self.stack.addWidget(self.reg_screen) # Index 1
+        self.stack.addWidget(self.rep_screen) # Index 2
+        self.stack.addWidget(self.cli_screen) # Index 3
+        self.stack.addWidget(self.res_screen) # Index 4 <--- Agregada
+        self.stack.addWidget(self.man_screen) # Index 5
 
-        # Añadir al stack
-        self.stack.addWidget(self.inventario)   # idx 0
-        self.stack.addWidget(self.registrar)    # idx 1
-        self.stack.addWidget(self.reportes)     # idx 2
-        self.stack.addWidget(self.clientes)     # idx 3
-        self.stack.addWidget(self.manual)       # idx 4
+        content_layout.addWidget(self.stack)
+        main_layout.addWidget(self.content_area)
 
-        # Señales
+    def _create_nav_button(self, text, icon_name):
+        """Helper para crear botones del menú con estilo uniforme."""
+        btn = QtWidgets.QPushButton(text)
+        btn.setCursor(QtCore.Qt.PointingHandCursor)
+        btn.setFixedHeight(45)
+        # Estilo base (se puede mejorar en styles.py)
+        btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: transparent;
+                color: {theme.TEXT_SECONDARY};
+                text-align: left;
+                padding-left: 10px;
+                border: none;
+                font-weight: 600;
+            }}
+            QPushButton:hover {{
+                background-color: {theme.HOVER_SIDEBAR};
+                color: {theme.TEXT_PRIMARY};
+                border-left: 4px solid {theme.ACCENT_COLOR};
+            }}
+            QPushButton:checked {{
+                color: {theme.ACCENT_COLOR};
+            }}
+        """)
+        # Si tuvieras sistema de iconos, aquí se asignaría icon_name
+        return btn
+
+    def _connect_signals(self):
+        # Conectar botones al cambio de página
+        self.btn_inv.clicked.connect(lambda: self._navigate(0, self.btn_inv))
+        self.btn_reg.clicked.connect(lambda: self._navigate(1, self.btn_reg))
+        self.btn_rep.clicked.connect(lambda: self._navigate(2, self.btn_rep))
+        self.btn_cli.clicked.connect(lambda: self._navigate(3, self.btn_cli))
+        self.btn_res.clicked.connect(lambda: self._navigate(4, self.btn_res)) # <--- 4. CONEXIÓN
+        self.btn_man.clicked.connect(lambda: self._navigate(5, self.btn_man))
+
+        # Señales internas de las pantallas
+        self.reg_screen.saved_signal.connect(self._on_product_registered)
+
+        # Iniciar en inventario
+        self._navigate(0, self.btn_inv)
+
+    def _navigate(self, index, button):
+        self.stack.setCurrentIndex(index)
+        
+        # Resetear estilos de todos los botones
+        for btn in [self.btn_inv, self.btn_reg, self.btn_rep, self.btn_cli, self.btn_res, self.btn_man]:
+            btn.setStyleSheet(btn.styleSheet().replace(f"color: {theme.ACCENT_COLOR};", f"color: {theme.TEXT_SECONDARY};"))
+        
+        # Marcar activo
+        button.setStyleSheet(button.styleSheet().replace(f"color: {theme.TEXT_SECONDARY};", f"color: {theme.ACCENT_COLOR};"))
+        
+        # Refrescar datos si es necesario
+        if index == 0: # Inventario
+            if hasattr(self.inv_screen, "refresh"):
+                self.inv_screen.refresh()
+        elif index == 2: # Reportes
+             if hasattr(self.rep_screen, "_load_data"):
+                self.rep_screen._load_data()
+
+    def _on_product_registered(self, data):
+        """Callback cuando se registra un producto exitosamente."""
+        from core import repo
         try:
-            self.registrar.saved_signal.connect(self._on_registrar_saved)
-        except Exception:
-            pass
-
-        h.addWidget(sidebar)
-        h.addWidget(self.stack, 1)
-
-        self._update_theme_label()
-
-    def _on_nav(self):
-        sender = self.sender()
-        mapping = {"INVENTARIO":0, "REGISTRAR":1, "REPORTES":2, "CLIENTES":3, "MANUAL":4}
-        idx = mapping.get(sender.text(), 0)
-        self.stack.setCurrentIndex(idx)
-
-    def _on_registrar_saved(self, data: dict):
-        """
-        Persistir en BD y actualizar la vista sin duplicar.
-        - Guardar en BD (una única acción).
-        - Recargar Inventario y Reportes desde BD.
-        """
-        try:
-            if self.current_user:
-                data["performed_by"] = self.current_user.get("id")
-
-            result = repo.create_product_with_inventory(data)
-            data["id"] = result.get("inventory_id") or data.get("id")
-
-            # Recargar vistas desde BD
-            try:
-                self.inventario.refresh_from_db(repo)
-            except Exception:
-                pass
-            try:
-                self.reportes.refresh_from_db(repo)
-            except Exception:
-                pass
-
-            QtWidgets.QMessageBox.information(self, "Registro exitoso", f"Producto {data.get('sku')} registrado correctamente.")
-            self.stack.setCurrentIndex(0)
+            repo.create_product_with_inventory(data)
+            # Ir al inventario para ver el nuevo producto
+            self._navigate(0, self.btn_inv)
+            QtWidgets.QMessageBox.information(self, "Éxito", "Producto registrado correctamente.")
         except Exception as e:
-            QtWidgets.QMessageBox.critical(self, "Error al guardar", f"No se pudo guardar en la base de datos: {e}")
-
-    # CRUD wrappers (Inventario)
-    def _inventario_create(self, data: dict):
-        prod = data.get("prod_date")
-        if isinstance(prod, (datetime, date)):
-            data["prod_date"] = prod.date().isoformat() if isinstance(prod, datetime) else prod.isoformat()
-        disp = data.get("dispatch_date")
-        if isinstance(disp, (datetime, date)):
-            data["dispatch_date"] = disp.date().isoformat() if isinstance(disp, datetime) else disp.isoformat()
-
-        resp = repo.create_product_with_inventory(data)
-        if isinstance(resp, dict):
-            inv_id = resp.get("inventory_id") or resp.get("inventoryId")
-            if inv_id is not None:
-                return int(inv_id)
-        if isinstance(resp, int):
-            return resp
-        return None
-
-    def _inventario_update(self, data: dict):
-        prod = data.get("prod_date")
-        if isinstance(prod, (datetime, date)):
-            data["prod_date"] = prod.date().isoformat() if isinstance(prod, datetime) else prod.isoformat()
-        disp = data.get("dispatch_date")
-        if isinstance(disp, (datetime, date)):
-            data["dispatch_date"] = disp.date().isoformat() if isinstance(disp, datetime) else disp.isoformat()
-        try:
-            return repo.update_inventory(data)
-        except Exception as e:
-            QtWidgets.QMessageBox.critical(self, "Error BD", f"No se pudo actualizar: {e}")
-
-    def _inventario_delete(self, inventory_id: int):
-        try:
-            return repo.delete_inventory(inventory_id)
-        except Exception as e:
-            QtWidgets.QMessageBox.critical(self, "Error BD", f"No se pudo eliminar: {e}")
-
-    def _on_inventory_changed(self):
-        self.inventario.refresh_from_db(repo)
-        self.reportes.refresh_from_db(repo)
-
-    def _on_toggle_theme(self):
-        if self.theme_manager:
-            self.theme_manager.toggle_theme()
-            self._update_theme_label()
-
-    def _update_theme_label(self):
-        if self.theme_manager:
-            current = getattr(self.theme_manager, "current_theme", None)
-            if current == self.theme_manager.THEME_DARK:
-                self.btn_theme.setText("Tema: Oscuro")
-            else:
-                self.btn_theme.setText("Tema: Claro")
-        else:
-            self.btn_theme.setText("Tema")
+            QtWidgets.QMessageBox.critical(self, "Error", f"Error al guardar en BD: {e}")
