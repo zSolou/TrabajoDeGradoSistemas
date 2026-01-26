@@ -101,7 +101,6 @@ class ReportesScreen(QtWidgets.QWidget):
         layout.addWidget(filter_frame)
 
         # --- Área Principal (Gráfico + Tabla) ---
-        # Usamos un Splitter para que el usuario pueda redimensionar si quiere
         splitter = QtWidgets.QSplitter(QtCore.Qt.Vertical)
         
         # 1. Gráfico
@@ -162,7 +161,7 @@ class ReportesScreen(QtWidgets.QWidget):
 
         splitter.addWidget(table_container)
         
-        # Configurar tamaños iniciales del splitter (50% grafico, 50% tabla)
+        # Configurar tamaños iniciales del splitter
         splitter.setStretchFactor(0, 1)
         splitter.setStretchFactor(1, 1)
         
@@ -178,7 +177,6 @@ class ReportesScreen(QtWidgets.QWidget):
         """)
 
     def _on_fecha_changed(self, text):
-        # Mostrar selectores de fecha solo si es "Personalizado"
         self.date_frame.setVisible(text == "Personalizado")
 
     def _load_data(self):
@@ -218,17 +216,20 @@ class ReportesScreen(QtWidgets.QWidget):
             
             if fecha_inicio: # Si hay filtro de fecha activo
                 if not f_prod_str:
-                    valid_date = False # Si no tiene fecha y filtramos por fecha, fuera
+                    valid_date = False 
                 else:
                     try:
                         # Convertir a objeto date
                         if isinstance(f_prod_str, str):
+                            if "T" in f_prod_str: 
+                                f_prod_str = f_prod_str.split("T")[0]
                             d_obj = date.fromisoformat(f_prod_str)
                         elif isinstance(f_prod_str, datetime):
                             d_obj = f_prod_str.date()
                         else:
                             d_obj = f_prod_str
                         
+                        # Comparación segura
                         if not (fecha_inicio <= d_obj <= fecha_fin):
                             valid_date = False
                     except:
@@ -259,7 +260,7 @@ class ReportesScreen(QtWidgets.QWidget):
         sizes = [v for k, v in totales.items() if v > 0]
         
         if not sizes:
-            ax.text(0.5, 0.5, "Sin datos en este rango", color="white", ha="center")
+            ax.text(0.5, 0.5, "Sin datos", color="white", ha="center")
             ax.axis('off')
         else:
             colores = ['#32D424', '#0d6efd', '#e14eca', '#ffc107', '#0dcaf0']
@@ -301,68 +302,67 @@ class ReportesScreen(QtWidgets.QWidget):
         self.lbl_total.setText(f"Total Volumen Filtrado: {total_volumen:.2f}")
 
     def _exportar_excel(self):
+        # 1. Verificar Librería
         if not OPENPYXL_AVAILABLE:
-            QtWidgets.QMessageBox.warning(self, "Error", "Librería 'openpyxl' no instalada.")
+            QtWidgets.QMessageBox.warning(self, "Error de Dependencia", 
+                "No se encontró la librería 'openpyxl'.\n\n"
+                "Por favor instálela ejecutando:\n"
+                "pip install openpyxl")
             return
             
+        # 2. Verificar Datos
         if not self.filtered_rows:
-            QtWidgets.QMessageBox.warning(self, "Atención", "No hay datos filtrados para exportar.")
+            QtWidgets.QMessageBox.warning(self, "Sin Datos", 
+                "No hay información visible en la tabla para exportar.\n"
+                "Ajuste los filtros para ver resultados.")
             return
 
+        # 3. Seleccionar Archivo
         path, _ = QtWidgets.QFileDialog.getSaveFileName(
-            self, "Guardar Reporte", "reporte_produccion.xlsx", "Excel Files (*.xlsx)"
+            self, "Guardar Reporte Excel", "reporte_produccion.xlsx", "Excel Files (*.xlsx)"
         )
         
-        if not path: return
+        if not path: 
+            return # Usuario canceló
 
+        # 4. Intentar Generar el Archivo (Bloque Seguro)
         try:
             wb = openpyxl.Workbook()
             ws = wb.active
-            ws.title = "Reporte Producción"
+            ws.title = "Reporte"
             
-            # Título del reporte en Excel
-            ws.merge_cells('A1:G1')
-            cell = ws['A1']
-            cell.value = f"REPORTE DE PRODUCCIÓN - {date.today()}"
-            cell.font = Font(size=14, bold=True, color="FFFFFF")
-            cell.fill = PatternFill(start_color="217346", end_color="217346", fill_type="solid")
-            cell.alignment = Alignment(horizontal="center")
-
-            # Encabezados
-            headers = ["SKU", "Tipo", "Cantidad", "Unidad", "Calidad", "F. Producción", "Observación"]
-            ws.append([]) # Espacio
-            ws.append(headers)
+            # Título y Encabezados
+            ws.append([f"REPORTE DE PRODUCCIÓN - {date.today()}"])
+            ws.append(["SKU", "Tipo", "Cantidad", "Unidad", "Calidad", "F. Producción", "Observación"])
             
-            header_font = Font(bold=True)
-            for cell in ws[3]: # Fila 3 porque hubo espacios
-                cell.font = header_font
-                cell.alignment = Alignment(horizontal="center")
+            # Estilos Simples (Menos propensos a fallar)
+            header_row = ws[2]
+            for cell in header_row:
+                cell.font = Font(bold=True)
                 
             # Datos
             for r in self.filtered_rows:
                 ws.append([
-                    r.get("sku"),
-                    r.get("product_type"),
+                    str(r.get("sku") or ""),
+                    str(r.get("product_type") or ""),
                     float(r.get("quantity") or 0),
-                    r.get("unit"),
-                    r.get("quality"),
-                    str(r.get("prod_date")),
-                    r.get("obs")
+                    str(r.get("unit") or ""),
+                    str(r.get("quality") or ""),
+                    str(r.get("prod_date") or ""),
+                    str(r.get("obs") or "")
                 ])
                 
-            # Ajustar columnas
-            for col in ws.columns:
-                max_length = 0
-                column = col[0].column_letter
-                for cell in col:
-                    try:
-                        if len(str(cell.value)) > max_length:
-                            max_length = len(str(cell.value))
-                    except: pass
-                ws.column_dimensions[column].width = max_length + 2
-
+            # Guardar
             wb.save(path)
-            QtWidgets.QMessageBox.information(self, "Éxito", f"Reporte generado en:\n{path}")
+            QtWidgets.QMessageBox.information(self, "Éxito", f"Reporte guardado correctamente en:\n{path}")
 
+        except PermissionError:
+             QtWidgets.QMessageBox.critical(self, "Error de Permisos", 
+                f"No se pudo guardar el archivo.\n\n"
+                "¿Tiene el archivo '{os.path.basename(path)}' abierto en Excel?\n"
+                "Si es así, ciérrelo e intente de nuevo.")
+                
         except Exception as e:
-            QtWidgets.QMessageBox.critical(self, "Error", f"Error al generar Excel: {e}")
+            # Captura cualquier otro error y lo muestra
+            QtWidgets.QMessageBox.critical(self, "Error Desconocido", 
+                f"Ocurrió un error al generar el Excel:\n{str(e)}")
