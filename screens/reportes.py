@@ -1,6 +1,6 @@
-from PySide6 import QtCore, QtWidgets
-from datetime import date, timedelta
-import math
+import os
+from datetime import date, datetime, timedelta
+from PySide6 import QtCore, QtWidgets, QtGui
 from core import repo, theme
 
 # Manejo de Matplotlib (Gráficos)
@@ -13,150 +13,356 @@ try:
 except ImportError:
     MATPLOTLIB_AVAILABLE = False
 
+# Manejo de Excel
+try:
+    import openpyxl
+    from openpyxl.styles import Font, PatternFill, Alignment
+    OPENPYXL_AVAILABLE = True
+except ImportError:
+    OPENPYXL_AVAILABLE = False
+
 class ReportesScreen(QtWidgets.QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.all_rows = []
+        self.all_rows = []      # Todos los datos crudos
+        self.filtered_rows = [] # Datos después de aplicar filtros
         self._setup_ui()
         self._load_data()
 
     def _setup_ui(self):
         layout = QtWidgets.QVBoxLayout(self)
         layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(15)
         
-        # Título
-        lbl_title = QtWidgets.QLabel("ANÁLISIS DE PRODUCCIÓN")
+        # --- Título ---
+        lbl_title = QtWidgets.QLabel("REPORTE DE PRODUCCIÓN")
         lbl_title.setStyleSheet(f"font-size: 18pt; font-weight: bold; color: {theme.ACCENT_COLOR};")
         layout.addWidget(lbl_title)
 
-        # --- Filtros ---
-        filter_container = QtWidgets.QFrame()
-        filter_container.setStyleSheet(f"background-color: {theme.BG_SIDEBAR}; border-radius: 8px;")
-        filter_layout = QtWidgets.QHBoxLayout(filter_container)
+        # --- Panel de Filtros ---
+        filter_frame = QtWidgets.QFrame()
+        filter_frame.setStyleSheet(f"background-color: {theme.BG_SIDEBAR}; border-radius: 8px; border: 1px solid {theme.BORDER_COLOR};")
+        filter_layout = QtWidgets.QHBoxLayout(filter_frame)
+        filter_layout.setContentsMargins(10, 10, 10, 10)
         
+        # Combo Tipo
         self.cb_tipo = QtWidgets.QComboBox()
         self.cb_tipo.addItems(["Todos los Tipos", "Tablas", "Machihembrado", "Tablones", "Paletas"])
-        self._estilizar_combo(self.cb_tipo)
+        self._estilizar_input(self.cb_tipo)
         
+        # Combo Fecha
         self.cb_fecha = QtWidgets.QComboBox()
-        self.cb_fecha.addItems(["Cualquier Fecha", "Última Semana", "Último Mes"])
-        self._estilizar_combo(self.cb_fecha)
+        self.cb_fecha.addItems(["Cualquier Fecha", "Última Semana", "Último Mes", "Personalizado"])
+        self._estilizar_input(self.cb_fecha)
+        self.cb_fecha.currentTextChanged.connect(self._on_fecha_changed)
 
-        btn_aplicar = QtWidgets.QPushButton("Actualizar Gráfico")
-        btn_aplicar.setStyleSheet(f"""
-            QPushButton {{ background-color: {theme.BTN_PRIMARY}; color: white; border-radius: 4px; padding: 5px 15px; font-weight: bold;}}
-            QPushButton:hover {{ background-color: #0b5ed7; }}
-        """)
+        # Fechas Personalizadas (Ocultas por defecto)
+        self.date_frame = QtWidgets.QWidget()
+        df_layout = QtWidgets.QHBoxLayout(self.date_frame)
+        df_layout.setContentsMargins(0,0,0,0)
+        
+        self.date_start = QtWidgets.QDateEdit(calendarPopup=True)
+        self.date_start.setDate(QtCore.QDate.currentDate().addDays(-7))
+        self._estilizar_input(self.date_start)
+        
+        self.date_end = QtWidgets.QDateEdit(calendarPopup=True)
+        self.date_end.setDate(QtCore.QDate.currentDate())
+        self._estilizar_input(self.date_end)
+        
+        df_layout.addWidget(QtWidgets.QLabel("Desde:"))
+        df_layout.addWidget(self.date_start)
+        df_layout.addWidget(QtWidgets.QLabel("Hasta:"))
+        df_layout.addWidget(self.date_end)
+        
+        self.date_frame.setVisible(False) # Inicialmente oculto
+
+        # Botón Aplicar
+        btn_aplicar = QtWidgets.QPushButton("Aplicar Filtros")
+        btn_aplicar.setCursor(QtCore.Qt.PointingHandCursor)
+        btn_aplicar.setStyleSheet(f"background-color: {theme.BTN_PRIMARY}; color: white; border-radius: 4px; padding: 6px 12px; font-weight: bold;")
         btn_aplicar.clicked.connect(self._aplicar_filtros)
 
-        filter_layout.addWidget(QtWidgets.QLabel("Filtrar por:", parent=filter_container))
+        # Botón Excel
+        btn_excel = QtWidgets.QPushButton("Generar Excel")
+        btn_excel.setCursor(QtCore.Qt.PointingHandCursor)
+        btn_excel.setStyleSheet("background-color: #217346; color: white; border-radius: 4px; padding: 6px 12px; font-weight: bold;")
+        btn_excel.clicked.connect(self._exportar_excel)
+
+        # Agregar al layout de filtros
+        filter_layout.addWidget(QtWidgets.QLabel("Producto:"))
         filter_layout.addWidget(self.cb_tipo)
+        filter_layout.addWidget(QtWidgets.QLabel("Período:"))
         filter_layout.addWidget(self.cb_fecha)
+        filter_layout.addWidget(self.date_frame)
         filter_layout.addStretch()
         filter_layout.addWidget(btn_aplicar)
+        filter_layout.addWidget(btn_excel)
         
-        layout.addWidget(filter_container)
+        layout.addWidget(filter_frame)
 
-        # --- Gráfico ---
+        # --- Área Principal (Gráfico + Tabla) ---
+        # Usamos un Splitter para que el usuario pueda redimensionar si quiere
+        splitter = QtWidgets.QSplitter(QtCore.Qt.Vertical)
+        
+        # 1. Gráfico
         self.chart_container = QtWidgets.QWidget()
         chart_layout = QtWidgets.QVBoxLayout(self.chart_container)
+        chart_layout.setContentsMargins(0, 10, 0, 10)
         
         if MATPLOTLIB_AVAILABLE:
-            # Configurar colores de matplotlib para modo oscuro
-            self.figure = Figure(figsize=(5, 4), facecolor=theme.BG_MAIN) # Fondo externo
+            self.figure = Figure(figsize=(5, 4), facecolor=theme.BG_MAIN)
             self.canvas = FigureCanvas(self.figure)
             self.canvas.setStyleSheet("background-color: transparent;")
             chart_layout.addWidget(self.canvas)
         else:
-            lbl_error = QtWidgets.QLabel("Librería 'matplotlib' no instalada.\nNo se pueden ver gráficos.")
-            lbl_error.setAlignment(QtCore.Qt.AlignCenter)
-            lbl_error.setStyleSheet("color: white;")
-            chart_layout.addWidget(lbl_error)
+            lbl = QtWidgets.QLabel("Matplotlib no instalado. No se puede mostrar el gráfico.")
+            lbl.setAlignment(QtCore.Qt.AlignCenter)
+            chart_layout.addWidget(lbl)
             
-        layout.addWidget(self.chart_container, 1) # Expandir
+        splitter.addWidget(self.chart_container)
 
-    def _estilizar_combo(self, combo):
-        combo.setStyleSheet(f"""
-            QComboBox {{
-                background-color: {theme.BG_INPUT};
+        # 2. Tabla de Detalle
+        table_container = QtWidgets.QWidget()
+        table_layout = QtWidgets.QVBoxLayout(table_container)
+        
+        lbl_table = QtWidgets.QLabel("Detalle de Inventario Filtrado")
+        lbl_table.setStyleSheet(f"font-weight: bold; color: {theme.TEXT_SECONDARY};")
+        table_layout.addWidget(lbl_table)
+
+        self.table = QtWidgets.QTableWidget()
+        columns = ["SKU", "Tipo", "Cantidad", "Unidad", "Calidad", "F. Producción", "Obs"]
+        self.table.setColumnCount(len(columns))
+        self.table.setHorizontalHeaderLabels(columns)
+        self.table.setStyleSheet(f"""
+            QTableWidget {{
+                background-color: {theme.BG_SIDEBAR};
                 color: {theme.TEXT_PRIMARY};
+                gridline-color: {theme.BORDER_COLOR};
                 border: 1px solid {theme.BORDER_COLOR};
-                border-radius: 4px;
-                padding: 4px;
             }}
-            QComboBox::drop-down {{ border: none; }}
+            QHeaderView::section {{
+                background-color: #1b1b26;
+                color: {theme.TEXT_SECONDARY};
+                padding: 5px;
+                border: none;
+                font-weight: bold;
+            }}
         """)
+        self.table.horizontalHeader().setSectionResizeMode(QtWidgets.QHeaderView.Stretch)
+        self.table.verticalHeader().setVisible(False)
+        self.table.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
+        
+        table_layout.addWidget(self.table)
+        
+        # Totalizador
+        self.lbl_total = QtWidgets.QLabel("Total Volumen: 0.00")
+        self.lbl_total.setAlignment(QtCore.Qt.AlignRight)
+        self.lbl_total.setStyleSheet(f"font-size: 11pt; font-weight: bold; color: {theme.ACCENT_COLOR};")
+        table_layout.addWidget(self.lbl_total)
+
+        splitter.addWidget(table_container)
+        
+        # Configurar tamaños iniciales del splitter (50% grafico, 50% tabla)
+        splitter.setStretchFactor(0, 1)
+        splitter.setStretchFactor(1, 1)
+        
+        layout.addWidget(splitter)
+
+    def _estilizar_input(self, widget):
+        widget.setStyleSheet(f"""
+            background-color: {theme.BG_INPUT}; 
+            color: white; 
+            border: 1px solid {theme.BORDER_COLOR}; 
+            padding: 4px; 
+            border-radius: 4px;
+        """)
+
+    def _on_fecha_changed(self, text):
+        # Mostrar selectores de fecha solo si es "Personalizado"
+        self.date_frame.setVisible(text == "Personalizado")
 
     def _load_data(self):
         try:
             self.all_rows = repo.list_inventory_rows()
             self._aplicar_filtros()
         except Exception as e:
-            print(f"Error cargando datos reportes: {e}")
+            print(f"Error loading report data: {e}")
 
     def _aplicar_filtros(self):
-        if not MATPLOTLIB_AVAILABLE: return
-
         tipo_filtro = self.cb_tipo.currentText()
         fecha_filtro = self.cb_fecha.currentText()
         
-        # Lógica de filtrado simple
-        filtrados = []
-        hoy = date.today()
+        # Rango de fechas
+        fecha_inicio = None
+        fecha_fin = date.today()
+        
+        if fecha_filtro == "Última Semana":
+            fecha_inicio = fecha_fin - timedelta(days=7)
+        elif fecha_filtro == "Último Mes":
+            fecha_inicio = fecha_fin - timedelta(days=30)
+        elif fecha_filtro == "Personalizado":
+            fecha_inicio = self.date_start.date().toPython()
+            fecha_fin = self.date_end.date().toPython()
+
+        self.filtered_rows = []
         
         for r in self.all_rows:
-            # Filtro Tipo
+            # 1. Filtro Tipo
             prod_type = r.get("product_type", "")
             if tipo_filtro != "Todos los Tipos" and prod_type != tipo_filtro:
                 continue
             
-            # Filtro Fecha (asumiendo formato ISO YYYY-MM-DD o datetime)
+            # 2. Filtro Fecha (prod_date)
             f_prod_str = r.get("prod_date")
-            if fecha_filtro != "Cualquier Fecha" and f_prod_str:
-                try:
-                    # Convertir si es string
-                    if isinstance(f_prod_str, str):
-                        f_prod = date.fromisoformat(f_prod_str)
-                    else:
-                        f_prod = f_prod_str # Asumimos objeto date
-                    
-                    if fecha_filtro == "Última Semana" and (hoy - f_prod).days > 7:
-                        continue
-                    if fecha_filtro == "Último Mes" and (hoy - f_prod).days > 30:
-                        continue
-                except:
-                    pass # Si falla la fecha, lo incluimos o excluimos según lógica
+            valid_date = True
             
-            filtrados.append(r)
+            if fecha_inicio: # Si hay filtro de fecha activo
+                if not f_prod_str:
+                    valid_date = False # Si no tiene fecha y filtramos por fecha, fuera
+                else:
+                    try:
+                        # Convertir a objeto date
+                        if isinstance(f_prod_str, str):
+                            d_obj = date.fromisoformat(f_prod_str)
+                        elif isinstance(f_prod_str, datetime):
+                            d_obj = f_prod_str.date()
+                        else:
+                            d_obj = f_prod_str
+                        
+                        if not (fecha_inicio <= d_obj <= fecha_fin):
+                            valid_date = False
+                    except:
+                        valid_date = False
+            
+            if valid_date:
+                self.filtered_rows.append(r)
 
-        # Generar datos para el Pie Chart
+        # Actualizar UI
+        self._actualizar_grafico()
+        self._actualizar_tabla()
+
+    def _actualizar_grafico(self):
+        if not MATPLOTLIB_AVAILABLE: return
+
+        # Agrupar datos para el Pie Chart
         totales = {}
-        for r in filtrados:
+        for r in self.filtered_rows:
             t = r.get("product_type", "Otros")
             q = float(r.get("quantity") or 0)
             totales[t] = totales.get(t, 0) + q
 
-        self._dibujar_grafico(totales)
-
-    def _dibujar_grafico(self, data_dict):
         self.figure.clear()
         ax = self.figure.add_subplot(111)
-        ax.set_facecolor(theme.BG_MAIN) # Fondo interno
+        ax.set_facecolor(theme.BG_MAIN) 
 
-        labels = [k for k, v in data_dict.items() if v > 0]
-        sizes = [v for k, v in data_dict.items() if v > 0]
+        labels = [k for k, v in totales.items() if v > 0]
+        sizes = [v for k, v in totales.items() if v > 0]
         
         if not sizes:
-            ax.text(0.5, 0.5, "Sin datos para mostrar", color="white", ha="center")
+            ax.text(0.5, 0.5, "Sin datos en este rango", color="white", ha="center")
+            ax.axis('off')
         else:
-            # Colores personalizados
             colores = ['#32D424', '#0d6efd', '#e14eca', '#ffc107', '#0dcaf0']
-            
             wedges, texts, autotexts = ax.pie(
                 sizes, labels=labels, autopct='%1.1f%%', 
                 startangle=90, colors=colores,
-                textprops={'color':"white"} # Texto blanco
+                textprops={'color':"white"}
             )
-            ax.set_title("Distribución de Inventario (Volumen)", color=theme.ACCENT_COLOR, fontsize=12)
+            ax.set_title(f"Distribución (Total: {sum(sizes):.2f})", color=theme.ACCENT_COLOR, fontsize=10)
 
         self.canvas.draw()
+
+    def _actualizar_tabla(self):
+        self.table.setRowCount(0)
+        total_volumen = 0.0
+        
+        for r in self.filtered_rows:
+            row = self.table.rowCount()
+            self.table.insertRow(row)
+            
+            cant = float(r.get("quantity") or 0)
+            total_volumen += cant
+            
+            valores = [
+                str(r.get("sku", "")),
+                str(r.get("product_type", "")),
+                f"{cant:.2f}",
+                str(r.get("unit", "")),
+                str(r.get("quality", "")),
+                str(r.get("prod_date", "")),
+                str(r.get("obs", ""))
+            ]
+            
+            for i, val in enumerate(valores):
+                item = QtWidgets.QTableWidgetItem(val)
+                item.setTextAlignment(QtCore.Qt.AlignCenter)
+                self.table.setItem(row, i, item)
+
+        self.lbl_total.setText(f"Total Volumen Filtrado: {total_volumen:.2f}")
+
+    def _exportar_excel(self):
+        if not OPENPYXL_AVAILABLE:
+            QtWidgets.QMessageBox.warning(self, "Error", "Librería 'openpyxl' no instalada.")
+            return
+            
+        if not self.filtered_rows:
+            QtWidgets.QMessageBox.warning(self, "Atención", "No hay datos filtrados para exportar.")
+            return
+
+        path, _ = QtWidgets.QFileDialog.getSaveFileName(
+            self, "Guardar Reporte", "reporte_produccion.xlsx", "Excel Files (*.xlsx)"
+        )
+        
+        if not path: return
+
+        try:
+            wb = openpyxl.Workbook()
+            ws = wb.active
+            ws.title = "Reporte Producción"
+            
+            # Título del reporte en Excel
+            ws.merge_cells('A1:G1')
+            cell = ws['A1']
+            cell.value = f"REPORTE DE PRODUCCIÓN - {date.today()}"
+            cell.font = Font(size=14, bold=True, color="FFFFFF")
+            cell.fill = PatternFill(start_color="217346", end_color="217346", fill_type="solid")
+            cell.alignment = Alignment(horizontal="center")
+
+            # Encabezados
+            headers = ["SKU", "Tipo", "Cantidad", "Unidad", "Calidad", "F. Producción", "Observación"]
+            ws.append([]) # Espacio
+            ws.append(headers)
+            
+            header_font = Font(bold=True)
+            for cell in ws[3]: # Fila 3 porque hubo espacios
+                cell.font = header_font
+                cell.alignment = Alignment(horizontal="center")
+                
+            # Datos
+            for r in self.filtered_rows:
+                ws.append([
+                    r.get("sku"),
+                    r.get("product_type"),
+                    float(r.get("quantity") or 0),
+                    r.get("unit"),
+                    r.get("quality"),
+                    str(r.get("prod_date")),
+                    r.get("obs")
+                ])
+                
+            # Ajustar columnas
+            for col in ws.columns:
+                max_length = 0
+                column = col[0].column_letter
+                for cell in col:
+                    try:
+                        if len(str(cell.value)) > max_length:
+                            max_length = len(str(cell.value))
+                    except: pass
+                ws.column_dimensions[column].width = max_length + 2
+
+            wb.save(path)
+            QtWidgets.QMessageBox.information(self, "Éxito", f"Reporte generado en:\n{path}")
+
+        except Exception as e:
+            QtWidgets.QMessageBox.critical(self, "Error", f"Error al generar Excel: {e}")
