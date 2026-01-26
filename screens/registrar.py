@@ -19,7 +19,7 @@ class RegistrarForm(QtWidgets.QWidget):
         header_layout.setContentsMargins(0, 0, 0, 0)
         
         self.title = QtWidgets.QLabel("REGISTRAR PRODUCTO")
-        self.title.setStyleSheet("font-weight:600; font-size:14pt; color: #32D424;")
+        self.title.setStyleSheet("font-weight:600; font-size:16pt; color: #32D424;")
         header_layout.addWidget(self.title)
         header_layout.addWidget(self.title, 0, QtCore.Qt.AlignTop | QtCore.Qt.AlignLeft)
         header_layout.addStretch(1)
