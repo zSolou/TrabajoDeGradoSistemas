@@ -3,31 +3,32 @@ from typing import Optional
 from PySide6 import QtWidgets
 from PySide6.QtCore import QSettings
 
-# Intentamos importar los estilos, si no existen, definimos unos vacíos para que no falle
+# Intentamos importar los estilos, si no existen, definimos unos vacíos
 try:
     from core.styles import DARK_THEME, LIGHT_THEME
 except ImportError:
     DARK_THEME = ""
     LIGHT_THEME = ""
 
-# --- 1. CONSTANTES DE COLOR (Necesarias para main_screen.py) ---
-# Estas son las variables que causaban el error al faltar
+# --- CONSTANTES DE COLOR (Necesarias para las nuevas pantallas) ---
 BG_MAIN = "#1e1e2f"       # Fondo principal
 BG_SIDEBAR = "#27293d"    # Fondo menú lateral
 BG_INPUT = "#2b3553"      # Fondo inputs
 TEXT_PRIMARY = "#ffffff"  # Texto blanco
 TEXT_SECONDARY = "#a9a9b3" # Texto gris
-ACCENT_COLOR = "#32D424"  # Color de acento (verde como tu título)
-HOVER_SIDEBAR = "rgba(255, 255, 255, 0.1)" # Efecto hover
+ACCENT_COLOR = "#32D424"  # Color de acento (verde)
+HOVER_SIDEBAR = "rgba(255, 255, 255, 0.1)" 
+
+# Estas son las que faltaban y causaban el error:
+BORDER_COLOR = "#444444"  # Color de bordes
+BTN_PRIMARY = "#0d6efd"   # Azul para botones principales
+BTN_SUCCESS = "#00f2c3"   # Verde azulado para nuevos registros
+BTN_DANGER = "#fd5d93"    # Rojo para eliminar/cancelar
 # ---------------------------------------------------------------
 
-
-# --- 2. TU CLASE THEME MANAGER (Original) ---
 class ThemeManager:
     """
     Centraliza el manejo de tema (Oscuro/Claro) para la app PySide6.
-    Aplica el tema a toda la aplicación mediante QApplication.setStyleSheet.
-    Persistencia de preferencia usando QSettings.
     """
     THEME_KEY = "theme"
     THEME_DARK = "dark"
@@ -40,7 +41,6 @@ class ThemeManager:
     ) -> None:
         self.app = app or QtWidgets.QApplication.instance()
 
-        # If a default theme is provided, use it and persist it; otherwise load from store.
         if default_theme in (self.THEME_DARK, self.THEME_LIGHT):
             self._theme = default_theme
             self._save_theme(self._theme)
@@ -86,8 +86,4 @@ class ThemeManager:
 
     @property
     def current_theme(self) -> str:
-        """
-        Propiedad pública para obtener el tema actual ('dark' | 'light').
-        Útil para mostrar en la UI el estado actual.
-        """
         return self._theme
