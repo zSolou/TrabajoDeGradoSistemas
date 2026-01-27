@@ -27,6 +27,9 @@ class Client(Base):
     phone = Column(Text)
     email = Column(Text)
     address = Column(Text)
+    # --- NUEVA LÍNEA ---
+    is_active = Column(Boolean, default=True) 
+    # -------------------
     created_at = Column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
     updated_at = Column(DateTime(timezone=True), onupdate=datetime.utcnow)
 

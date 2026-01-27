@@ -254,44 +254,59 @@ def delete_inventory(inventory_id: int):
         session.delete(inv)
         session.commit()
         
-        # ----Clientes----#
-        
+# ---------- CLIENTES ----------
 def create_client(data: dict):
-        with SessionLocal() as session:
-            client = Client(
+    with SessionLocal() as session:
+        client = Client(
             name=data.get("nombre"),
             document_id=data.get("cedula_rif"),
             phone=data.get("telefono"),
             email=data.get("email"),
             address=data.get("direccion"),
+            is_active=True # Por defecto activo
         )
         session.add(client)
         session.commit()
         session.refresh(client)
         return client.id
 
-def list_clients():
-        with SessionLocal() as session:
-            return session.query(Client).order_by(Client.name).all()
+def list_clients(solo_activos=True):
+    """
+    Si solo_activos=True, trae solo los visibles. 
+    Si False, trae todos (para poder reactivar).
+    """
+    with SessionLocal() as session:
+        stmt = select(Client)
+        if solo_activos:
+            stmt = stmt.where(Client.is_active == True)
+        stmt = stmt.order_by(Client.name)
+        return session.execute(stmt).scalars().all()
 
 def update_client(client_id: int, data: dict):
-            with SessionLocal() as session:
-                client = session.get(Client, client_id)
-                if not client:
-                    raise ValueError("Cliente no encontrado")
-                client.name = data.get("nombre", client.name)
-                client.document_id = data.get("cedula_rif", client.document_id)
-                client.phone = data.get("telefono", client.phone)
-                client.email = data.get("email", client.email)
-                client.address = data.get("direccion", client.address)
-                session.commit()
+    with SessionLocal() as session:
+        client = session.get(Client, client_id)
+        if not client:
+            raise ValueError("Cliente no encontrado")
+        
+        client.name = data.get("nombre", client.name)
+        client.document_id = data.get("cedula_rif", client.document_id)
+        client.phone = data.get("telefono", client.phone)
+        client.email = data.get("email", client.email)
+        client.address = data.get("direccion", client.address)
+        
+        # Si envían el estado activo/inactivo, lo actualizamos
+        if "is_active" in data:
+            client.is_active = data["is_active"]
+            
+        session.commit()
 
-def delete_client(client_id: int):
-            with SessionLocal() as session:
-                client = session.get(Client, client_id)
-                if client:
-                    session.delete(client)
-                    session.commit()
+def toggle_client_active(client_id: int, active: bool):
+    """Activa o desactiva un cliente sin borrarlo."""
+    with SessionLocal() as session:
+        client = session.get(Client, client_id)
+        if client:
+            client.is_active = active
+            session.commit()
 
 # ---------- psycopg2 helper (ejecuciones crudas) ----------
 def get_psycopg2_conn():
