@@ -33,7 +33,7 @@ class RegistrarForm(QtWidgets.QWidget):
             QComboBox::drop-down {{ border: none; }}
         """)
         header_layout.addWidget(self.product_type)
-
+        header_layout.addWidget(self.product_type, 0, QtCore.Qt.AlignTop | QtCore.Qt.AlignRight)
         main.addWidget(header)
 
         # --- Formulario ---
