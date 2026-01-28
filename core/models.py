@@ -98,3 +98,17 @@ class AuditLog(Base):
     object_id = Column(String)
     occurred_at = Column(DateTime(timezone=True), server_default=func.now())
     details = Column(JSON)
+    
+# EN core/models.py
+
+# ... (Tus otras clases Product, Inventory, etc.)
+
+class PredefinedMeasure(Base):
+    __tablename__ = "predefined_measures"
+
+    id = Column(Integer, primary_key=True, index=True)
+    product_type = Column(Text, nullable=False)
+    name = Column(Text)
+    largo = Column(Numeric(10, 2))
+    ancho = Column(Numeric(10, 2))
+    espesor = Column(Numeric(10, 2))

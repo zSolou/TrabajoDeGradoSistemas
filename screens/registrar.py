@@ -1,5 +1,123 @@
-from PySide6 import QtCore, QtWidgets
-from core import theme
+from PySide6 import QtCore, QtWidgets, QtGui
+from core import theme, repo
+
+class MedidasManagerDialog(QtWidgets.QDialog):
+    """Ventana para gestionar y seleccionar medidas favoritas"""
+    measure_selected = QtCore.Signal(dict) # Señal para enviar datos al padre
+
+    def __init__(self, product_type, parent=None):
+        super().__init__(parent)
+        self.product_type = product_type
+        self.setWindowTitle(f"Medidas: {product_type}")
+        self.resize(500, 400)
+        self.setStyleSheet(f"background-color: {theme.BG_SIDEBAR}; color: {theme.TEXT_PRIMARY};")
+        self._build_ui()
+        self._load_measures()
+
+    def _build_ui(self):
+        layout = QtWidgets.QVBoxLayout(self)
+        
+        # 1. Lista de Medidas
+        self.list_widget = QtWidgets.QListWidget()
+        self.list_widget.setStyleSheet(f"""
+            QListWidget {{ background-color: {theme.BG_INPUT}; border: 1px solid {theme.BORDER_COLOR}; border-radius: 4px; padding: 5px; }}
+            QListWidget::item {{ padding: 8px; border-bottom: 1px solid #444; }}
+            QListWidget::item:selected {{ background-color: {theme.BTN_PRIMARY}; color: white; }}
+        """)
+        self.list_widget.itemDoubleClicked.connect(self._usar_medida)
+        layout.addWidget(QtWidgets.QLabel("Selecciona una medida (Doble Clic para usar):"))
+        layout.addWidget(self.list_widget)
+
+        # 2. Formulario para Nueva Medida
+        new_frame = QtWidgets.QGroupBox("Agregar Nueva Medida")
+        new_frame.setStyleSheet(f"QGroupBox {{ border: 1px solid {theme.BORDER_COLOR}; margin-top: 20px; font-weight: bold; }}")
+        form_layout = QtWidgets.QHBoxLayout(new_frame)
+        
+        self.inp_name = QtWidgets.QLineEdit(); self.inp_name.setPlaceholderText("Nombre (Ej: Estándar)")
+        self.inp_l = QtWidgets.QDoubleSpinBox(); self.inp_l.setSuffix(" m"); self.inp_l.setRange(0, 10); self.inp_l.setValue(0)
+        self.inp_a = QtWidgets.QDoubleSpinBox(); self.inp_a.setSuffix(" cm"); self.inp_a.setRange(0, 100); self.inp_a.setValue(0)
+        self.inp_e = QtWidgets.QDoubleSpinBox(); self.inp_e.setSuffix(" cm"); self.inp_e.setRange(0, 100); self.inp_e.setValue(0)
+        
+        # Ocultar espesor si es Machihembrado
+        if self.product_type == "Machihembrado":
+            self.inp_e.setVisible(False)
+
+        btn_add = QtWidgets.QPushButton("+")
+        btn_add.setStyleSheet(f"background-color: {theme.BTN_SUCCESS}; font-weight: bold; padding: 5px 10px;")
+        btn_add.clicked.connect(self._agregar_medida)
+
+        form_layout.addWidget(self.inp_name)
+        form_layout.addWidget(self.inp_l)
+        form_layout.addWidget(self.inp_a)
+        if self.product_type != "Machihembrado":
+            form_layout.addWidget(self.inp_e)
+        form_layout.addWidget(btn_add)
+        
+        layout.addWidget(new_frame)
+
+        # 3. Botones Acción
+        btn_layout = QtWidgets.QHBoxLayout()
+        btn_del = QtWidgets.QPushButton("Eliminar Seleccionada")
+        btn_del.setStyleSheet(f"background-color: {theme.BTN_DANGER}; padding: 8px;")
+        btn_del.clicked.connect(self._eliminar_medida)
+        
+        btn_use = QtWidgets.QPushButton("Usar Medida")
+        btn_use.setStyleSheet(f"background-color: {theme.BTN_PRIMARY}; padding: 8px; font-weight: bold;")
+        btn_use.clicked.connect(lambda: self._usar_medida(self.list_widget.currentItem()))
+
+        btn_layout.addWidget(btn_del)
+        btn_layout.addStretch()
+        btn_layout.addWidget(btn_use)
+        layout.addLayout(btn_layout)
+
+    def _load_measures(self):
+        self.list_widget.clear()
+        measures = repo.get_measures_by_type(self.product_type)
+        for m in measures:
+            label = f"{m.name or 'Sin Nombre'} | {m.largo}m x {m.ancho}cm"
+            if m.espesor and m.espesor > 0:
+                label += f" x {m.espesor}cm"
+            
+            item = QtWidgets.QListWidgetItem(label)
+            item.setData(QtCore.Qt.UserRole, m) # Guardamos el objeto entero
+            self.list_widget.addItem(item)
+
+    def _agregar_medida(self):
+        name = self.inp_name.text().strip() or "Medida Personalizada"
+        if self.inp_l.value() == 0 or self.inp_a.value() == 0:
+             QtWidgets.QMessageBox.warning(self, "Error", "Largo y Ancho son obligatorios.")
+             return
+
+        data = {
+            "product_type": self.product_type,
+            "name": name,
+            "largo": self.inp_l.value(),
+            "ancho": self.inp_a.value(),
+            "espesor": self.inp_e.value()
+        }
+        repo.create_measure(data)
+        self._load_measures()
+        # Reset inputs
+        self.inp_name.clear()
+
+    def _eliminar_medida(self):
+        item = self.list_widget.currentItem()
+        if not item: return
+        m = item.data(QtCore.Qt.UserRole)
+        repo.delete_measure(m.id)
+        self._load_measures()
+
+    def _usar_medida(self, item):
+        if not item: return
+        m = item.data(QtCore.Qt.UserRole)
+        # Emitimos señal con los datos
+        self.measure_selected.emit({
+            "largo": m.largo,
+            "ancho": m.ancho,
+            "espesor": m.espesor
+        })
+        self.accept()
+
 
 class RegistrarForm(QtWidgets.QWidget):
     saved_signal = QtCore.Signal(dict)
@@ -14,27 +132,37 @@ class RegistrarForm(QtWidgets.QWidget):
         main.setSpacing(10)
 
         # --- Encabezado ---
-        header = QtWidgets.QWidget()
-        header_layout = QtWidgets.QHBoxLayout(header)
-        header_layout.setContentsMargins(0, 0, 0, 0)
-        
+        header_widget = QtWidgets.QWidget()
+        header_layout = QtWidgets.QVBoxLayout(header_widget)
+        header_layout.setContentsMargins(0,0,0,0)
+
+        # 1. Título
         self.title = QtWidgets.QLabel("REGISTRAR PRODUCTO")
         self.title.setStyleSheet(f"font-weight:600; font-size:14pt; color: {theme.ACCENT_COLOR};")
         header_layout.addWidget(self.title)
-        header_layout.addWidget(self.title, 0, QtCore.Qt.AlignTop | QtCore.Qt.AlignLeft)
-        
-        header_layout.addStretch(1)
 
+        # 2. Botón Medidas (Oculto al inicio)
+        self.btn_measures = QtWidgets.QPushButton("⭐ Cargar Lista de Medidas")
+        self.btn_measures.setCursor(QtCore.Qt.PointingHandCursor)
+        self.btn_measures.setVisible(False) # Se muestra al elegir producto
+        self.btn_measures.setStyleSheet(f"""
+            QPushButton {{ background-color: #ffc107; color: black; font-weight: bold; border-radius: 4px; padding: 6px; }}
+            QPushButton:hover {{ background-color: #ffca2c; }}
+        """)
+        self.btn_measures.clicked.connect(self._open_measures_dialog)
+        header_layout.addWidget(self.btn_measures)
+
+        # 3. Combo Selección
         self.product_type = QtWidgets.QComboBox()
         self.product_type.setMinimumWidth(200)
         self.product_type.addItems(["-- Seleccione Producto --", "Tablas", "Machihembrado", "Tablones", "Paletas"])
         self.product_type.setStyleSheet(f"""
-            QComboBox {{ background-color: {theme.BG_INPUT}; color: white; border: 1px solid {theme.BORDER_COLOR}; padding: 5px; border-radius: 4px; }}
+            QComboBox {{ background-color: {theme.BG_INPUT}; color: white; border: 1px solid {theme.BORDER_COLOR}; padding: 8px; border-radius: 4px; font-size: 11pt; }}
             QComboBox::drop-down {{ border: none; }}
         """)
         header_layout.addWidget(self.product_type)
-        header_layout.addWidget(self.product_type, 0, QtCore.Qt.AlignTop | QtCore.Qt.AlignRight)
-        main.addWidget(header)
+        
+        main.addWidget(header_widget)
 
         # --- Formulario ---
         self.form_container = QtWidgets.QWidget()
@@ -48,15 +176,11 @@ class RegistrarForm(QtWidgets.QWidget):
         self.prod_date = self._create_date_edit()
         self.dispatch_date = self._create_date_edit()
 
-        # MEDIDAS (Validaciones aplicadas aquí)
-        # Largo: Máximo 6 metros (estándar de madera), 2 decimales
+        # MEDIDAS
         self.largo = self._create_spinbox("m", max_val=6.00) 
-        
-        # Ancho y Espesor: Máximo 30 cm, 2 decimales
         self.ancho = self._create_spinbox("cm", max_val=30.00)
         self.espesor = self._create_spinbox("cm", max_val=30.00)
         
-        # Piezas
         self.piezas = QtWidgets.QSpinBox()
         self.piezas.setRange(0, 1000000)
         self.piezas.setSuffix(" un.")
@@ -90,15 +214,15 @@ class RegistrarForm(QtWidgets.QWidget):
         self.form_container.setVisible(False)
         main.addWidget(self.form_container)
 
-        # --- Botón ---
+        # --- Botón Guardar ---
         btn_layout = QtWidgets.QHBoxLayout()
         btn_layout.addStretch()
         self.save_btn = QtWidgets.QPushButton("Guardar Producto")
-        self.save_btn.setMinimumHeight(40)
-        self.save_btn.setMinimumWidth(150)
+        self.save_btn.setMinimumHeight(45)
+        self.save_btn.setMinimumWidth(200)
         self.save_btn.setCursor(QtCore.Qt.PointingHandCursor)
         self.save_btn.setStyleSheet(f"""
-            QPushButton {{ background-color: {theme.BTN_PRIMARY}; color: white; font-weight: bold; border-radius: 4px; }}
+            QPushButton {{ background-color: {theme.BTN_PRIMARY}; color: white; font-weight: bold; border-radius: 4px; font-size: 11pt; }}
             QPushButton:hover {{ background-color: #0b5ed7; }}
         """)
         self.save_btn.clicked.connect(self._on_save)
@@ -147,39 +271,54 @@ class RegistrarForm(QtWidgets.QWidget):
     def _on_product_change(self, text):
         if text.startswith("--"):
             self.form_container.setVisible(False)
+            self.btn_measures.setVisible(False)
             return
         
         self.form_container.setVisible(True)
+        self.btn_measures.setVisible(True) # MOSTRAR EL BOTÓN
+        self.btn_measures.setText(f"⭐ Ver Medidas para {text}")
         
         show_map = {
             "Tablas": ["largo", "ancho", "espesor", "piezas"],
             "Tablones": ["largo", "ancho", "espesor", "piezas"],
             "Paletas": ["largo", "ancho", "espesor", "piezas"],
-            "Machihembrado": ["largo", "ancho", "piezas"] # Machihembrado no usa espesor
+            "Machihembrado": ["largo", "ancho", "piezas"]
         }
         
         commons = ["prod_date", "dispatch_date", "quality", "drying", "planing", "impregnated", "obs"]
         
-        # Ocultar todo primero
         for w in self.rows.values(): w.setVisible(False)
         
-        # Mostrar lo necesario
         targets = show_map.get(text, []) + commons
         for key in targets:
             if key in self.rows:
                 self.rows[key].setVisible(True)
 
-    def _validate_input(self, tipo):
-        """Retorna True si todo es válido, o muestra error y retorna False."""
+    def _open_measures_dialog(self):
+        """Abre el diálogo de medidas guardadas"""
+        ptype = self.product_type.currentText()
+        if ptype.startswith("--"): return
         
+        dialog = MedidasManagerDialog(ptype, self)
+        dialog.measure_selected.connect(self._apply_measure)
+        dialog.exec_()
+
+    def _apply_measure(self, data):
+        """Aplica la medida seleccionada al formulario"""
+        if "largo" in data: self.largo.setValue(float(data["largo"]))
+        if "ancho" in data: self.ancho.setValue(float(data["ancho"]))
+        if "espesor" in data: self.espesor.setValue(float(data["espesor"]))
+        
+        QtWidgets.QMessageBox.information(self, "Medida Aplicada", "Se han cargado las dimensiones correctamente.")
+
+    def _validate_input(self, tipo):
         # 1. Validación de Fechas
         f_prod = self.prod_date.date()
         f_desp = self.dispatch_date.date()
         
         if f_desp < f_prod:
             QtWidgets.QMessageBox.warning(self, "Fecha Inválida", 
-                "La **Fecha de Despacho** no puede ser anterior a la Fecha de Producción.\n"
-                "Verifique las fechas ingresadas.")
+                "La **Fecha de Despacho** no puede ser anterior a la Fecha de Producción.")
             self.dispatch_date.setFocus()
             return False
 
@@ -222,11 +361,9 @@ class RegistrarForm(QtWidgets.QWidget):
             QtWidgets.QMessageBox.warning(self, "Error", "Seleccione un tipo de producto.")
             return
 
-        # Validar Inputs
         if not self._validate_input(tipo):
             return
 
-        # Confirmación
         confirm = QtWidgets.QMessageBox.question(
             self, "Confirmar Registro",
             f"¿Está seguro de registrar:\n\nProducto: {tipo}\nCantidad: {self.piezas.value()} piezas?",
@@ -235,9 +372,8 @@ class RegistrarForm(QtWidgets.QWidget):
         if confirm == QtWidgets.QMessageBox.No:
             return
 
-        # Cálculo
         sku = self._generate_sku(tipo)
-        # Cálculo de volumen: m * m * m = m3. (Ojo: ancho y espesor vienen en cm, convertir a m)
+        # Cálculo de volumen: m * m * m = m3. (Ancho/Espesor en cm -> /100)
         largo_m = self.largo.value()
         ancho_m = self.ancho.value() / 100.0
         espesor_m = self.espesor.value() / 100.0
@@ -246,7 +382,6 @@ class RegistrarForm(QtWidgets.QWidget):
             cantidad = largo_m * ancho_m * espesor_m * self.piezas.value()
             unidad = "m3"
         elif tipo == "Machihembrado":
-            # Machihembrado suele venderse por m2 cubiertos
             cantidad = largo_m * ancho_m * self.piezas.value()
             unidad = "m2"
         else:

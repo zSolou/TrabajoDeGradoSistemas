@@ -3,7 +3,7 @@ from decimal import Decimal
 from sqlalchemy import select, update
 from sqlalchemy.orm.exc import NoResultFound
 from .db import SessionLocal, create_tables
-from .models import Client, User, Product, Inventory, Movement
+from .models import Client, PredefinedMeasure, User, Product, Inventory, Movement
 import psycopg2
 import psycopg2.extras
 import os
@@ -306,6 +306,34 @@ def toggle_client_active(client_id: int, active: bool):
         client = session.get(Client, client_id)
         if client:
             client.is_active = active
+            session.commit()
+
+# ---------- MEDIDAS PREDEFINIDAS ----------
+def create_measure(data: dict):
+    with SessionLocal() as session:
+        measure = PredefinedMeasure(
+            product_type=data.get("product_type"),
+            name=data.get("name"),
+            largo=data.get("largo"),
+            ancho=data.get("ancho"),
+            espesor=data.get("espesor")
+        )
+        session.add(measure)
+        session.commit()
+        session.refresh(measure)
+        return measure
+
+def get_measures_by_type(p_type: str):
+    with SessionLocal() as session:
+        # Filtramos por el tipo de producto actual
+        stmt = select(PredefinedMeasure).where(PredefinedMeasure.product_type == p_type)
+        return session.execute(stmt).scalars().all()
+
+def delete_measure(measure_id: int):
+    with SessionLocal() as session:
+        measure = session.get(PredefinedMeasure, measure_id)
+        if measure:
+            session.delete(measure)
             session.commit()
 
 # ---------- psycopg2 helper (ejecuciones crudas) ----------
