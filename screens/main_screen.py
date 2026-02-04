@@ -4,7 +4,8 @@ from screens.registrar import RegistrarForm
 from screens.reportes import ReportesScreen
 from screens.clientes import ClientesScreen
 from screens.manual import ManualScreen
-from screens.respaldo import RespaldoScreen  # <--- 1. IMPORTAMOS LA NUEVA PANTALLA
+from screens.respaldo import RespaldoScreen  
+from screens.despacho import DespachoScreen
 
 from core import theme
 
@@ -43,6 +44,7 @@ class MainScreen(QtWidgets.QWidget):
 
         # Botones de Navegación
         self.btn_inv = self._create_nav_button("INVENTARIO", "inventory")
+        self.btn_despacho = self._create_nav_button("DESPACHOS", "truck") # Icono sugerido
         self.btn_reg = self._create_nav_button("REGISTRAR", "add")
         self.btn_rep = self._create_nav_button("REPORTES", "chart")
         self.btn_cli = self._create_nav_button("CLIENTES", "group")
@@ -55,6 +57,7 @@ class MainScreen(QtWidgets.QWidget):
         self.btn_man = self._create_nav_button("MANUAL", "help")
 
         menu_layout.addWidget(self.btn_inv)
+        menu_layout.addWidget(self.btn_despacho)
         menu_layout.addWidget(self.btn_reg)
         menu_layout.addWidget(self.btn_rep)
         menu_layout.addWidget(self.btn_cli)
@@ -84,6 +87,7 @@ class MainScreen(QtWidgets.QWidget):
         
         # Instanciar Pantallas
         self.inv_screen = InventarioScreen()
+        self.despacho_screen = DespachoScreen()
         self.reg_screen = RegistrarForm()
         self.rep_screen = ReportesScreen()
         self.cli_screen = ClientesScreen()
@@ -92,11 +96,12 @@ class MainScreen(QtWidgets.QWidget):
 
         # Agregar al Stack en orden
         self.stack.addWidget(self.inv_screen) # Index 0
-        self.stack.addWidget(self.reg_screen) # Index 1
-        self.stack.addWidget(self.rep_screen) # Index 2
-        self.stack.addWidget(self.cli_screen) # Index 3
-        self.stack.addWidget(self.res_screen) # Index 4 <--- Agregada
-        self.stack.addWidget(self.man_screen) # Index 5
+        self.stack.addWidget(self.despacho_screen) # Index 1
+        self.stack.addWidget(self.reg_screen) # Index 2
+        self.stack.addWidget(self.rep_screen) # Index 3
+        self.stack.addWidget(self.cli_screen) # Index 4
+        self.stack.addWidget(self.res_screen) # Index 5 <--- Agregada
+        self.stack.addWidget(self.man_screen) # Index 6
 
         content_layout.addWidget(self.stack)
         main_layout.addWidget(self.content_area)
@@ -131,11 +136,12 @@ class MainScreen(QtWidgets.QWidget):
     def _connect_signals(self):
         # Conectar botones al cambio de página
         self.btn_inv.clicked.connect(lambda: self._navigate(0, self.btn_inv))
-        self.btn_reg.clicked.connect(lambda: self._navigate(1, self.btn_reg))
-        self.btn_rep.clicked.connect(lambda: self._navigate(2, self.btn_rep))
-        self.btn_cli.clicked.connect(lambda: self._navigate(3, self.btn_cli))
-        self.btn_res.clicked.connect(lambda: self._navigate(4, self.btn_res)) # <--- 4. CONEXIÓN
-        self.btn_man.clicked.connect(lambda: self._navigate(5, self.btn_man))
+        self.btn_despacho.clicked.connect(lambda: self._navigate(1, self.btn_despacho))
+        self.btn_reg.clicked.connect(lambda: self._navigate(2, self.btn_reg))
+        self.btn_rep.clicked.connect(lambda: self._navigate(3, self.btn_rep))
+        self.btn_cli.clicked.connect(lambda: self._navigate(4, self.btn_cli))
+        self.btn_res.clicked.connect(lambda: self._navigate(5, self.btn_res)) # <--- 4. CONEXIÓN
+        self.btn_man.clicked.connect(lambda: self._navigate(6, self.btn_man))
 
         # Señales internas de las pantallas
         self.reg_screen.saved_signal.connect(self._on_product_registered)

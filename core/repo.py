@@ -1,9 +1,9 @@
 # core/repo.py
 from decimal import Decimal
-from sqlalchemy import select, update
+from sqlalchemy import select, update, delete, and_
 from sqlalchemy.orm.exc import NoResultFound
 from .db import SessionLocal, create_tables
-from .models import Client, PredefinedMeasure, User, Product, Inventory, Movement
+from .models import Client, PredefinedMeasure, User, Product, Inventory, Movement, Dispatch
 import psycopg2
 import psycopg2.extras
 import os
@@ -386,6 +386,84 @@ def authenticate_user_plain(username: str, password: str):
         if user.password_hash == password:
             return {"id": user.id, "username": user.username, "role": user.role}
         return None
+
+# ---------- DESPACHOS Y LÓGICA DE SALIDA ----------
+
+def get_available_inventory():
+    """
+    Retorna lotes de inventario que tienen stock > 0 y están DISPONIBLES.
+    Incluye datos del producto padre para mostrar el nombre real.
+    """
+    with SessionLocal() as session:
+        # Hacemos join con Product para tener el nombre descriptivo
+        stmt = (
+            select(Inventory, Product.name)
+            .join(Product, Inventory.product_id == Product.id)
+            .where(
+                and_(Inventory.quantity > 0, Inventory.status == 'DISPONIBLE')
+            )
+            .order_by(Inventory.prod_date)
+        )
+        
+        results = session.execute(stmt).all()
+        # Combinamos el objeto Inventory con el nombre del producto
+        data = []
+        for inv, prod_name in results:
+            # Inyectamos el nombre del producto en el objeto inventory temporalmente para la UI
+            inv.product_name = prod_name 
+            data.append(inv)
+        return data
+
+def create_dispatch(data: dict):
+    """
+    1. Crea registro en dispatches.
+    2. Resta cantidad en inventory.
+    3. Actualiza status si llega a 0.
+    """
+    with SessionLocal() as session:
+        # 1. Obtener el lote de inventario
+        inv_item = session.get(Inventory, data['inventory_id'])
+        if not inv_item:
+            raise ValueError("Lote de inventario no encontrado.")
+        
+        cant_despacho = Decimal(str(data['quantity']))
+        cant_actual = inv_item.quantity
+        
+        if cant_despacho > cant_actual:
+            raise ValueError(f"Stock insuficiente en este lote. Disponible: {cant_actual}")
+            
+        # 2. Crear registro de despacho
+        new_dispatch = Dispatch(
+            inventory_id=data['inventory_id'],
+            client_id=data['client_id'],
+            quantity=cant_despacho,
+            date=data['date'],
+            transport_guide=data.get('guide', ''),
+            obs=data.get('obs', '')
+        )
+        session.add(new_dispatch)
+        
+        # 3. Actualizar Inventario (Restar)
+        inv_item.quantity = cant_actual - cant_despacho
+        
+        # 4. Verificar si se agotó (tolerancia pequeña por decimales)
+        if inv_item.quantity <= Decimal("0.001"):
+            inv_item.quantity = 0
+            inv_item.status = "AGOTADO"
+            
+        # Opcional: Registrar movimiento de salida en 'movements' para auditoría doble
+        mv = Movement(
+            inventory_id=inv_item.id,
+            product_id=inv_item.product_id,
+            change_quantity=-cant_despacho, # Negativo porque sale
+            movement_type="OUT",
+            reference=f"Despacho Guía {data.get('guide')}",
+            notes="Salida por venta/despacho"
+        )
+        session.add(mv)
+            
+        session.commit()
+        return new_dispatch.id
 
 # ---------- inicialización (solo si se ejecuta directamente) ----------
 if __name__ == "__main__":
