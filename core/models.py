@@ -2,7 +2,7 @@
 from sqlalchemy import (
     Column, Integer, String, Text, Boolean, Date, DateTime, Numeric, ForeignKey, JSON
 )
-from datetime import datetime
+from datetime import datetime, date
 from sqlalchemy.sql import func
 from sqlalchemy.orm import declarative_base, relationship
 
@@ -20,16 +20,13 @@ class User(Base):
 
 class Client(Base):
     __tablename__ = "clients"
-
     id = Column(Integer, primary_key=True, index=True)
     name = Column(Text, nullable=False)
     document_id = Column(Text)
     phone = Column(Text)
     email = Column(Text)
     address = Column(Text)
-    # --- NUEVA LÍNEA ---
-    is_active = Column(Boolean, default=True) 
-    # -------------------
+    is_active = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
     updated_at = Column(DateTime(timezone=True), onupdate=datetime.utcnow)
 
@@ -39,7 +36,7 @@ class Product(Base):
     sku = Column(String, unique=True)
     name = Column(String, nullable=False)
     description = Column(Text)
-    unit = Column(String)   # e.g., m3, pieza
+    unit = Column(String)   
     quality = Column(String)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -48,36 +45,63 @@ class Product(Base):
 class Inventory(Base):
     __tablename__ = "inventory"
     id = Column(Integer, primary_key=True)
+    
+    # Relación con el Catálogo Maestro
     product_id = Column(Integer, ForeignKey("products.id", ondelete="CASCADE"), nullable=False)
-    # Eliminadas: lot_code y location
-    quantity = Column(Numeric(18,6), nullable=False, default=0)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    
+    # --- CAMPOS NUEVOS DE TRAZABILIDAD ---
+    sku = Column(String) # SKU específico del lote (generado por fecha)
+    nro_lote = Column(String) # Lote físico manual
+    status = Column(String, default="DISPONIBLE") # DISPONIBLE, AGOTADO
+    # -------------------------------------
 
-    # Atributos de medida y producción
+    quantity = Column(Numeric(18,6), nullable=False, default=0) # Cantidad actual
+    
+    # Dimensiones específicas de este lote
     largo = Column(Numeric(10,2))
     ancho = Column(Numeric(10,2))
     espesor = Column(Numeric(10,2))
     piezas = Column(Integer)
 
-    prod_date = Column(Date)      # Fecha de producción (Date)
-    dispatch_date = Column(Date)  # Fecha de despacho (Date)
+    prod_date = Column(Date)
+    dispatch_date = Column(Date)
 
     quality = Column(String)
     drying = Column(String)
     planing = Column(String)
     impregnated = Column(String)
     obs = Column(Text)
+    
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
+    # Relaciones
     product = relationship("Product", backref="inventory_items")
+    dispatches = relationship("Dispatch", back_populates="inventory_item")
+
+class Dispatch(Base):
+    __tablename__ = "dispatches"
+    id = Column(Integer, primary_key=True, index=True)
+    
+    inventory_id = Column(Integer, ForeignKey("inventory.id"))
+    client_id = Column(Integer, ForeignKey("clients.id"))
+    
+    quantity = Column(Numeric(10, 2)) # Cantidad despachada
+    date = Column(Date, default=date.today)
+    transport_guide = Column(String) # Guía SADA/Insaibot
+    obs = Column(Text)
+    
+    # Relaciones
+    inventory_item = relationship("Inventory", back_populates="dispatches")
+    client = relationship("Client")
 
 class Movement(Base):
     __tablename__ = "movements"
     id = Column(Integer, primary_key=True)
     inventory_id = Column(Integer, ForeignKey("inventory.id", ondelete="SET NULL"))
     product_id = Column(Integer, ForeignKey("products.id", ondelete="CASCADE"), nullable=False)
-    change_quantity = Column(Numeric(18,6), nullable=False)  # + entrada, - salida
-    movement_type = Column(String, nullable=False)  # IN, OUT, ADJUSTMENT, TRANSFER
+    change_quantity = Column(Numeric(18,6), nullable=False) 
+    movement_type = Column(String, nullable=False) 
     reference = Column(Text)
     performed_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"))
     performed_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -98,14 +122,9 @@ class AuditLog(Base):
     object_id = Column(String)
     occurred_at = Column(DateTime(timezone=True), server_default=func.now())
     details = Column(JSON)
-    
-# EN core/models.py
-
-# ... (Tus otras clases Product, Inventory, etc.)
 
 class PredefinedMeasure(Base):
     __tablename__ = "predefined_measures"
-
     id = Column(Integer, primary_key=True, index=True)
     product_type = Column(Text, nullable=False)
     name = Column(Text)
