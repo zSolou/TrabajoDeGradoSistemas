@@ -3,6 +3,14 @@ import os
 from PySide6 import QtCore, QtWidgets, QtGui
 from core import repo, theme
 
+# Mismos factores para mostrar equivalencias
+FACTORES_CONVERSION = {
+    "Tablas": 30,
+    "Tablones": 20,
+    "Paletas": 10,
+    "Machihembrado": 5
+}
+
 try:
     import openpyxl
     from openpyxl.styles import Font, PatternFill, Alignment
@@ -11,7 +19,6 @@ except ImportError:
     OPENPYXL_AVAILABLE = False
 
 class EditarProductoDialog(QtWidgets.QDialog):
-    """Diálogo emergente para editar un lote de inventario."""
     def __init__(self, data, parent=None):
         super().__init__(parent)
         self.data = data
@@ -31,15 +38,21 @@ class EditarProductoDialog(QtWidgets.QDialog):
         form_layout = QtWidgets.QFormLayout(content_widget)
         form_layout.setSpacing(12)
         
-        # Campos
         self.inp_lote = QtWidgets.QLineEdit(self.data.get('nro_lote', ''))
         self.inp_lote.setStyleSheet(f"background-color: {theme.BG_INPUT}; border: 1px solid {theme.BORDER_COLOR}; padding: 4px; color: white;")
         
-        self.inp_cantidad = self._add_spinbox(float(self.data.get('quantity', 0)), "Cantidad Total")
+        # Cantidad en Piezas (Base de datos)
+        self.inp_cantidad = self._add_spinbox(float(self.data.get('quantity', 0)), "Piezas Reales")
+        
         self.inp_largo = self._add_spinbox(float(self.data.get('largo', 0)), "Largo (m)")
         self.inp_ancho = self._add_spinbox(float(self.data.get('ancho', 0)), "Ancho (cm)")
         self.inp_espesor = self._add_spinbox(float(self.data.get('espesor', 0)), "Espesor (cm)")
-        self.inp_piezas = self._add_spinbox(int(self.data.get('piezas', 0)), "Piezas", is_int=True)
+        
+        # OJO: Piezas aquí se refiere a la medida "nro piezas" del cálculo de volumen si se usara
+        # Pero con el nuevo sistema, quantity ES las piezas. 
+        # Mantendremos este campo por si acaso es un dato técnico del lote.
+        self.inp_piezas_tec = self._add_spinbox(int(self.data.get('piezas', 0)), "Ref. Piezas", is_int=True)
+        
         self.inp_prod_date = self._add_date(self.data.get('prod_date'))
         
         self.inp_calidad = QtWidgets.QComboBox()
@@ -53,11 +66,11 @@ class EditarProductoDialog(QtWidgets.QDialog):
         self.inp_obs.setStyleSheet(f"background-color: {theme.BG_INPUT}; border: 1px solid {theme.BORDER_COLOR};")
 
         form_layout.addRow("Nro. Lote:", self.inp_lote)
-        form_layout.addRow("Cantidad:", self.inp_cantidad)
+        form_layout.addRow("Cantidad (Piezas):", self.inp_cantidad)
         form_layout.addRow("Largo:", self.inp_largo)
         form_layout.addRow("Ancho:", self.inp_ancho)
         form_layout.addRow("Espesor:", self.inp_espesor)
-        form_layout.addRow("Nº Piezas:", self.inp_piezas)
+        form_layout.addRow("Ref. Calculo:", self.inp_piezas_tec)
         form_layout.addRow("Calidad:", self.inp_calidad)
         form_layout.addRow("Fecha Prod.:", self.inp_prod_date)
         form_layout.addRow("Observaciones:", self.inp_obs)
@@ -65,15 +78,12 @@ class EditarProductoDialog(QtWidgets.QDialog):
         scroll.setWidget(content_widget)
         layout.addWidget(scroll)
 
-        # Botones
         btn_layout = QtWidgets.QHBoxLayout()
         btn_save = QtWidgets.QPushButton("Guardar Cambios")
-        btn_save.setCursor(QtCore.Qt.PointingHandCursor)
         btn_save.setStyleSheet(f"background-color: {theme.BTN_SUCCESS}; color: black; font-weight: bold; padding: 10px; border-radius: 5px;")
         btn_save.clicked.connect(self.accept)
         
         btn_cancel = QtWidgets.QPushButton("Cancelar")
-        btn_cancel.setCursor(QtCore.Qt.PointingHandCursor)
         btn_cancel.setStyleSheet(f"background-color: {theme.BTN_DANGER}; color: white; padding: 10px; border-radius: 5px;")
         btn_cancel.clicked.connect(self.reject)
 
@@ -93,13 +103,11 @@ class EditarProductoDialog(QtWidgets.QDialog):
         de = QtWidgets.QDateEdit(calendarPopup=True)
         if date_str:
             try:
-                s = str(date_str)
-                if "T" in s: s = s.split("T")[0]
+                s = str(date_str).split("T")[0]
                 val = QtCore.QDate.fromString(s, "yyyy-MM-dd")
                 de.setDate(val)
             except: pass
-        else:
-            de.setDate(QtCore.QDate.currentDate())
+        else: de.setDate(QtCore.QDate.currentDate())
         de.setStyleSheet(f"background-color: {theme.BG_INPUT}; border: 1px solid {theme.BORDER_COLOR}; padding: 4px;")
         return de
 
@@ -111,7 +119,7 @@ class EditarProductoDialog(QtWidgets.QDialog):
             "largo": self.inp_largo.value(),
             "ancho": self.inp_ancho.value(),
             "espesor": self.inp_espesor.value(),
-            "piezas": self.inp_piezas.value(),
+            "piezas": self.inp_piezas_tec.value(),
             "quality": self.inp_calidad.currentText(),
             "prod_date": self.inp_prod_date.date().toString("yyyy-MM-dd"),
             "obs": self.inp_obs.toPlainText()
@@ -162,11 +170,10 @@ class InventarioScreen(QtWidgets.QWidget):
         actions_layout.addWidget(btn_export)
         layout.addLayout(actions_layout)
 
-        # TABLA ACTUALIZADA: Columna LOTE
         self.table = QtWidgets.QTableWidget()
         columns = [
-            "ID", "SKU", "LOTE", "Producto", "Cant.", "Unidad", 
-            "Largo", "Ancho", "Espesor", "Piezas", "Calidad", "F. Prod", "Estado", "Obs"
+            "ID", "SKU", "LOTE", "Producto", "Existencia (Real / Bultos)", "Unidad", 
+            "Largo", "Ancho", "Espesor", "Calidad", "F. Prod", "Estado", "Obs"
         ]
         self.table.setColumnCount(len(columns))
         self.table.setHorizontalHeaderLabels(columns)
@@ -205,17 +212,25 @@ class InventarioScreen(QtWidgets.QWidget):
             row_idx = self.table.rowCount()
             self.table.insertRow(row_idx)
             
+            # Calculo visual de bultos
+            tipo = str(row_data.get("product_type", ""))
+            qty_piezas = float(row_data.get('quantity', 0))
+            factor = FACTORES_CONVERSION.get(tipo, 1)
+            bultos = qty_piezas / factor
+            
+            # Formato dual: "60 (2.0 Bultos)"
+            display_qty = f"{qty_piezas:.0f} ({bultos:.1f} Bultos)"
+
             valores = [
                 str(row_data.get("id", "")),
                 str(row_data.get("sku", "")),
-                str(row_data.get("nro_lote", "---")), # LOTE AQUI
-                str(row_data.get("product_type", "")),
-                f"{row_data.get('quantity', 0):.2f}",
+                str(row_data.get("nro_lote", "---")),
+                tipo,
+                display_qty, # Cantidad compuesta
                 str(row_data.get("unit", "")),
                 str(row_data.get("largo", 0)),
                 str(row_data.get("ancho", 0)),
                 str(row_data.get("espesor", 0)),
-                str(row_data.get("piezas", 0)),
                 str(row_data.get("quality", "")),
                 str(row_data.get("prod_date", "")),
                 str(row_data.get("status", "")),
@@ -225,8 +240,6 @@ class InventarioScreen(QtWidgets.QWidget):
             for col_idx, valor in enumerate(valores):
                 item = QtWidgets.QTableWidgetItem(valor)
                 if col_idx == 0: item.setData(QtCore.Qt.UserRole, row_data)
-                if col_idx in [4, 6, 7, 8, 9]: item.setTextAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
-                else: item.setTextAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
                 self.table.setItem(row_idx, col_idx, item)
         self.lbl_status.setText(f"Registros: {self.table.rowCount()}")
 
@@ -245,7 +258,7 @@ class InventarioScreen(QtWidgets.QWidget):
         if not data:
             QtWidgets.QMessageBox.warning(self, "Atención", "Seleccione un producto para eliminar.")
             return
-        confirm = QtWidgets.QMessageBox.question(self, "Confirmar Eliminación", f"¿Eliminar Lote {data.get('nro_lote')} ({data.get('sku')})?\nEsta acción es irreversible.", QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No)
+        confirm = QtWidgets.QMessageBox.question(self, "Confirmar Eliminación", f"¿Eliminar Lote {data.get('nro_lote')} ({data.get('sku')})?", QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No)
         if confirm == QtWidgets.QMessageBox.Yes:
             try:
                 repo.delete_inventory(data['id'])
@@ -280,24 +293,20 @@ class InventarioScreen(QtWidgets.QWidget):
             wb = openpyxl.Workbook()
             ws = wb.active
             ws.title = "Inventario"
-            headers = ["ID", "SKU", "LOTE", "Producto", "Cantidad", "Unidad", "Largo", "Ancho", "Espesor", "Piezas", "Calidad", "F. Prod", "Estado", "Obs"]
+            headers = ["ID", "SKU", "LOTE", "Producto", "Cantidad (Piezas)", "Bultos (Aprox)", "Unidad", "Largo", "Ancho", "Espesor", "Calidad", "F. Prod", "Estado"]
             ws.append(headers)
-            header_font = Font(bold=True, color="FFFFFF")
-            header_fill = PatternFill(start_color="4F81BD", end_color="4F81BD", fill_type="solid")
-            for cell in ws[1]:
-                cell.font = header_font
-                cell.fill = header_fill
-                cell.alignment = Alignment(horizontal="center")
             
             for r in self.all_data:
+                tipo = str(r.get("product_type", ""))
+                q = float(r.get("quantity") or 0)
+                f = FACTORES_CONVERSION.get(tipo, 1)
                 ws.append([
-                    r.get("id"), r.get("sku"), r.get("nro_lote"), r.get("product_type"),
-                    float(r.get("quantity") or 0), r.get("unit"),
+                    r.get("id"), r.get("sku"), r.get("nro_lote"), tipo,
+                    q, q/f, r.get("unit"),
                     float(r.get("largo") or 0), float(r.get("ancho") or 0), float(r.get("espesor") or 0),
-                    int(r.get("piezas") or 0), r.get("quality"),
-                    str(r.get("prod_date") or ""), str(r.get("status") or ""), str(r.get("obs") or "")
+                    r.get("quality"), str(r.get("prod_date") or ""), str(r.get("status") or "")
                 ])
             wb.save(path)
-            QtWidgets.QMessageBox.information(self, "Éxito", f"Reporte Excel generado en:\n{path}")
+            QtWidgets.QMessageBox.information(self, "Éxito", f"Reporte generado en:\n{path}")
         except Exception as e:
             QtWidgets.QMessageBox.critical(self, "Error", f"Error al exportar: {e}")

@@ -2,10 +2,18 @@ from PySide6 import QtCore, QtWidgets, QtGui
 from datetime import date
 from core import repo, theme
 
+# Factores compartidos (Idealmente irían en un archivo común, pero aquí funcionan bien)
+FACTORES_CONVERSION = {
+    "Tablas": 30,
+    "Tablones": 20,
+    "Paletas": 10,
+    "Machihembrado": 5
+}
+
 class DespachoScreen(QtWidgets.QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.selected_inventory = None # Guardará el objeto Inventory seleccionado
+        self.selected_inventory = None
         self._setup_ui()
 
     def _setup_ui(self):
@@ -13,24 +21,20 @@ class DespachoScreen(QtWidgets.QWidget):
         layout.setContentsMargins(20, 20, 20, 20)
         layout.setSpacing(15)
 
-        # Título
         lbl_title = QtWidgets.QLabel("DESPACHO DE MERCANCÍA")
         lbl_title.setStyleSheet(f"font-size: 18pt; font-weight: bold; color: {theme.ACCENT_COLOR};")
         layout.addWidget(lbl_title)
 
-        # --- Formulario ---
         form_frame = QtWidgets.QFrame()
         form_frame.setStyleSheet(f"background-color: {theme.BG_SIDEBAR}; border-radius: 8px; border: 1px solid {theme.BORDER_COLOR};")
         form_layout = QtWidgets.QFormLayout(form_frame)
         form_layout.setContentsMargins(20, 20, 20, 20)
         form_layout.setSpacing(15)
 
-        # 1. Cliente
         self.cb_client = QtWidgets.QComboBox()
         self.cb_client.setStyleSheet(f"background-color: {theme.BG_INPUT}; color: white; padding: 5px;")
         form_layout.addRow("Cliente / Destino:", self.cb_client)
 
-        # 2. Selección de Producto (Buscador + Info)
         prod_layout = QtWidgets.QHBoxLayout()
         self.btn_select_prod = QtWidgets.QPushButton("🔍 Buscar Lote en Inventario")
         self.btn_select_prod.setCursor(QtCore.Qt.PointingHandCursor)
@@ -44,15 +48,15 @@ class DespachoScreen(QtWidgets.QWidget):
         prod_layout.addWidget(self.lbl_prod_info)
         form_layout.addRow("Producto a Despachar:", prod_layout)
 
-        # 3. Cantidad a Sacar
-        self.spin_qty = QtWidgets.QDoubleSpinBox()
+        # --- CAMBIO: Input en BULTOS ---
+        self.spin_qty = QtWidgets.QDoubleSpinBox() # Usamos Double por si despachan medio bulto (opcional)
         self.spin_qty.setRange(0, 999999)
-        self.spin_qty.setDecimals(2)
-        self.spin_qty.setEnabled(False) # Se activa al elegir producto
+        self.spin_qty.setDecimals(1) # Permitir 1.5 bultos si es necesario
+        self.spin_qty.setSuffix(" Bultos")
+        self.spin_qty.setEnabled(False) 
         self.spin_qty.setStyleSheet(f"background-color: {theme.BG_INPUT}; color: white;")
         form_layout.addRow("Cantidad a Despachar:", self.spin_qty)
 
-        # 4. Guía y Fecha
         self.inp_guide = QtWidgets.QLineEdit()
         self.inp_guide.setPlaceholderText("Nro. Guía de Movilización (SADA/INSAI)")
         self.inp_guide.setStyleSheet(f"background-color: {theme.BG_INPUT}; color: white; padding: 5px;")
@@ -66,14 +70,10 @@ class DespachoScreen(QtWidgets.QWidget):
 
         layout.addWidget(form_frame)
 
-        # Botón Acción
         self.btn_process = QtWidgets.QPushButton("CONFIRMAR SALIDA")
         self.btn_process.setMinimumHeight(50)
         self.btn_process.setCursor(QtCore.Qt.PointingHandCursor)
-        self.btn_process.setStyleSheet(f"""
-            QPushButton {{ background-color: {theme.BTN_SUCCESS}; color: black; font-weight: bold; font-size: 12pt; border-radius: 5px; }}
-            QPushButton:hover {{ background-color: #00cfa5; }}
-        """)
+        self.btn_process.setStyleSheet(f"QPushButton {{ background-color: {theme.BTN_SUCCESS}; color: black; font-weight: bold; font-size: 12pt; border-radius: 5px; }} QPushButton:hover {{ background-color: #00cfa5; }}")
         self.btn_process.clicked.connect(self._process_dispatch)
         layout.addWidget(self.btn_process)
         
@@ -84,8 +84,7 @@ class DespachoScreen(QtWidgets.QWidget):
         self.cb_client.clear()
         try:
             clients = repo.list_clients(solo_activos=True)
-            for c in clients:
-                self.cb_client.addItem(c.name, c.id)
+            for c in clients: self.cb_client.addItem(c.name, c.id)
         except: pass
 
     def _open_product_selector(self):
@@ -98,36 +97,44 @@ class DespachoScreen(QtWidgets.QWidget):
         if not self.selected_inventory: return
         
         inv = self.selected_inventory
-        # Mostrar info clara: Nombre del producto + SKU del lote
-        # inv.product_name viene de la consulta en repo.py
-        p_name = getattr(inv, 'product_name', 'Producto') 
+        p_name = getattr(inv, 'product_name', 'Producto')
         
-        info = f"PROD: {p_name}\nLOTE: {inv.nro_lote or 'Sin Lote'} (SKU: {inv.sku})\nDISPONIBLE: {inv.quantity:.2f}"
+        # Calcular equivalencia inversa para mostrar al usuario
+        factor = FACTORES_CONVERSION.get(inv.product_type, 1)
+        bultos_disponibles = float(inv.quantity) / factor
+        
+        info = (f"PROD: {p_name} | LOTE: {inv.nro_lote or '-'}\n"
+                f"DISPONIBLE: {inv.quantity:.0f} Piezas (~{bultos_disponibles:.1f} Bultos)")
+        
         self.lbl_prod_info.setText(info)
         self.lbl_prod_info.setStyleSheet("color: #00f2c3; font-weight: bold;")
         
-        # Configurar limites del spinbox
         self.spin_qty.setEnabled(True)
-        self.spin_qty.setMaximum(float(inv.quantity))
+        self.spin_qty.setMaximum(bultos_disponibles) # Limitar por bultos
         self.spin_qty.setValue(0)
         self.spin_qty.setFocus()
 
     def _process_dispatch(self):
         if not self.selected_inventory:
-            QtWidgets.QMessageBox.warning(self, "Error", "Seleccione un lote del inventario primero.")
+            QtWidgets.QMessageBox.warning(self, "Error", "Seleccione un lote.")
             return
         
-        qty = self.spin_qty.value()
-        if qty <= 0:
+        bultos_out = self.spin_qty.value()
+        if bultos_out <= 0:
             QtWidgets.QMessageBox.warning(self, "Error", "La cantidad debe ser mayor a 0.")
             return
+
+        # Conversión a Piezas para la base de datos
+        prod_type = self.selected_inventory.product_type
+        factor = FACTORES_CONVERSION.get(prod_type, 1)
+        piezas_out = bultos_out * factor
 
         client_name = self.cb_client.currentText()
         confirm = QtWidgets.QMessageBox.question(
             self, "Confirmar Despacho",
-            f"¿Confirma la salida de {qty} unidades?\n"
-            f"Cliente: {client_name}\n\n"
-            "El inventario se descontará automáticamente.",
+            f"Despachar: {bultos_out} Bultos\n"
+            f"(Equivalente a {piezas_out:.0f} piezas)\n"
+            f"Cliente: {client_name}",
             QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No
         )
         
@@ -136,16 +143,15 @@ class DespachoScreen(QtWidgets.QWidget):
                 data = {
                     "inventory_id": self.selected_inventory.id,
                     "client_id": self.cb_client.currentData(),
-                    "quantity": qty,
+                    "quantity": piezas_out, # Enviamos piezas al repo
                     "date": self.date_edit.date().toPython(),
                     "guide": self.inp_guide.text(),
-                    "obs": ""
+                    "obs": f"Salida de {bultos_out} bultos"
                 }
                 repo.create_dispatch(data)
                 
-                QtWidgets.QMessageBox.information(self, "Éxito", "Despacho registrado correctamente.\nInventario actualizado.")
+                QtWidgets.QMessageBox.information(self, "Éxito", "Despacho registrado.")
                 
-                # Reset UI
                 self.selected_inventory = None
                 self.lbl_prod_info.setText("Ningún lote seleccionado")
                 self.lbl_prod_info.setStyleSheet("color: #ff6b6b;")
@@ -157,7 +163,7 @@ class DespachoScreen(QtWidgets.QWidget):
                 QtWidgets.QMessageBox.critical(self, "Error", str(e))
 
 class ProductSelectorDialog(QtWidgets.QDialog):
-    """Buscador emergente de lotes disponibles"""
+    """Buscador emergente de lotes"""
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Seleccionar Lote Disponible")
@@ -177,18 +183,17 @@ class ProductSelectorDialog(QtWidgets.QDialog):
         layout.addWidget(self.search)
 
         self.table = QtWidgets.QTableWidget()
-        cols = ["Producto", "Lote", "SKU", "Disponible", "Calidad", "F. Prod"]
+        cols = ["Producto", "Lote", "SKU", "Disp. (Pzas)", "Disp. (Bultos)", "F. Prod"]
         self.table.setColumnCount(len(cols))
         self.table.setHorizontalHeaderLabels(cols)
         self.table.horizontalHeader().setSectionResizeMode(QtWidgets.QHeaderView.Stretch)
         self.table.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
         self.table.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
-        self.table.setStyleSheet(f"background-color: {theme.BG_INPUT}; alternate-background-color: {theme.BG_SIDEBAR}; gridline-color: {theme.BORDER_COLOR};")
+        self.table.setStyleSheet(f"background-color: {theme.BG_INPUT}; alternate-background-color: {theme.BG_SIDEBAR};")
         self.table.doubleClicked.connect(self._select)
         layout.addWidget(self.table)
 
         btn = QtWidgets.QPushButton("Seleccionar Lote")
-        btn.setCursor(QtCore.Qt.PointingHandCursor)
         btn.setStyleSheet(f"background-color: {theme.BTN_PRIMARY}; padding: 10px; font-weight: bold;")
         btn.clicked.connect(self._select)
         layout.addWidget(btn)
@@ -205,12 +210,16 @@ class ProductSelectorDialog(QtWidgets.QDialog):
             
             p_name = getattr(inv, 'product_name', '---')
             
+            # Calculo visual de bultos
+            factor = FACTORES_CONVERSION.get(inv.product_type, 1)
+            bultos = float(inv.quantity) / factor
+
             vals = [
                 p_name,
                 inv.nro_lote or "-", 
                 inv.sku, 
-                f"{inv.quantity:.2f}", 
-                inv.quality or "", 
+                f"{inv.quantity:.0f}", 
+                f"{bultos:.1f}", # Columna extra util
                 str(inv.prod_date)
             ]
             
@@ -226,7 +235,6 @@ class ProductSelectorDialog(QtWidgets.QDialog):
             p_name = getattr(inv, 'product_name', '').lower()
             sku = (inv.sku or '').lower()
             lote = (inv.nro_lote or '').lower()
-            
             if text in p_name or text in sku or text in lote:
                 filtered.append(inv)
         self._populate(filtered)
