@@ -2,7 +2,7 @@ from PySide6 import QtCore, QtWidgets, QtGui
 from datetime import date
 from core import repo, theme
 
-# Factores compartidos (Idealmente irían en un archivo común, pero aquí funcionan bien)
+# Factores de conversión (Unidades por bulto)
 FACTORES_CONVERSION = {
     "Tablas": 30,
     "Tablones": 20,
@@ -48,10 +48,10 @@ class DespachoScreen(QtWidgets.QWidget):
         prod_layout.addWidget(self.lbl_prod_info)
         form_layout.addRow("Producto a Despachar:", prod_layout)
 
-        # --- CAMBIO: Input en BULTOS ---
-        self.spin_qty = QtWidgets.QDoubleSpinBox() # Usamos Double por si despachan medio bulto (opcional)
+        # Input en BULTOS
+        self.spin_qty = QtWidgets.QDoubleSpinBox() 
         self.spin_qty.setRange(0, 999999)
-        self.spin_qty.setDecimals(1) # Permitir 1.5 bultos si es necesario
+        self.spin_qty.setDecimals(1)
         self.spin_qty.setSuffix(" Bultos")
         self.spin_qty.setEnabled(False) 
         self.spin_qty.setStyleSheet(f"background-color: {theme.BG_INPUT}; color: white;")
@@ -97,10 +97,11 @@ class DespachoScreen(QtWidgets.QWidget):
         if not self.selected_inventory: return
         
         inv = self.selected_inventory
+        # CORRECCIÓN: Usar product_name en lugar de product_type
         p_name = getattr(inv, 'product_name', 'Producto')
         
-        # Calcular equivalencia inversa para mostrar al usuario
-        factor = FACTORES_CONVERSION.get(inv.product_type, 1)
+        # Calcular equivalencia inversa
+        factor = FACTORES_CONVERSION.get(p_name, 1) # Usamos p_name como clave
         bultos_disponibles = float(inv.quantity) / factor
         
         info = (f"PROD: {p_name} | LOTE: {inv.nro_lote or '-'}\n"
@@ -110,7 +111,7 @@ class DespachoScreen(QtWidgets.QWidget):
         self.lbl_prod_info.setStyleSheet("color: #00f2c3; font-weight: bold;")
         
         self.spin_qty.setEnabled(True)
-        self.spin_qty.setMaximum(bultos_disponibles) # Limitar por bultos
+        self.spin_qty.setMaximum(bultos_disponibles)
         self.spin_qty.setValue(0)
         self.spin_qty.setFocus()
 
@@ -124,8 +125,8 @@ class DespachoScreen(QtWidgets.QWidget):
             QtWidgets.QMessageBox.warning(self, "Error", "La cantidad debe ser mayor a 0.")
             return
 
-        # Conversión a Piezas para la base de datos
-        prod_type = self.selected_inventory.product_type
+        # CORRECCIÓN: Obtener el tipo desde el nombre inyectado
+        prod_type = getattr(self.selected_inventory, 'product_name', '')
         factor = FACTORES_CONVERSION.get(prod_type, 1)
         piezas_out = bultos_out * factor
 
@@ -208,10 +209,11 @@ class ProductSelectorDialog(QtWidgets.QDialog):
             r = self.table.rowCount()
             self.table.insertRow(r)
             
+            # CORRECCIÓN: Usar product_name
             p_name = getattr(inv, 'product_name', '---')
             
             # Calculo visual de bultos
-            factor = FACTORES_CONVERSION.get(inv.product_type, 1)
+            factor = FACTORES_CONVERSION.get(p_name, 1) # Usar p_name
             bultos = float(inv.quantity) / factor
 
             vals = [
@@ -219,7 +221,7 @@ class ProductSelectorDialog(QtWidgets.QDialog):
                 inv.nro_lote or "-", 
                 inv.sku, 
                 f"{inv.quantity:.0f}", 
-                f"{bultos:.1f}", # Columna extra util
+                f"{bultos:.1f}",
                 str(inv.prod_date)
             ]
             
@@ -232,6 +234,7 @@ class ProductSelectorDialog(QtWidgets.QDialog):
         text = text.lower()
         filtered = []
         for inv in self.inventory_items:
+            # CORRECCIÓN: Usar product_name
             p_name = getattr(inv, 'product_name', '').lower()
             sku = (inv.sku or '').lower()
             lote = (inv.nro_lote or '').lower()
