@@ -45,26 +45,23 @@ class Product(Base):
 class Inventory(Base):
     __tablename__ = "inventory"
     id = Column(Integer, primary_key=True)
-    
-    # Relación con el Catálogo Maestro
     product_id = Column(Integer, ForeignKey("products.id", ondelete="CASCADE"), nullable=False)
     
-    # --- CAMPOS NUEVOS DE TRAZABILIDAD ---
-    sku = Column(String) # SKU específico del lote (generado por fecha)
-    nro_lote = Column(String) # Lote físico manual
-    status = Column(String, default="DISPONIBLE") # DISPONIBLE, AGOTADO
-    # -------------------------------------
+    # Trazabilidad
+    sku = Column(String) 
+    nro_lote = Column(String) # <--- Campo Vital
+    status = Column(String, default="DISPONIBLE") 
 
-    quantity = Column(Numeric(18,6), nullable=False, default=0) # Cantidad actual
+    quantity = Column(Numeric(18,6), nullable=False, default=0)
     
-    # Dimensiones específicas de este lote
+    # Medidas
     largo = Column(Numeric(10,2))
     ancho = Column(Numeric(10,2))
     espesor = Column(Numeric(10,2))
     piezas = Column(Integer)
 
     prod_date = Column(Date)
-    dispatch_date = Column(Date)
+    # dispatch_date ELIMINADO
 
     quality = Column(String)
     drying = Column(String)
@@ -75,7 +72,6 @@ class Inventory(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
-    # Relaciones
     product = relationship("Product", backref="inventory_items")
     dispatches = relationship("Dispatch", back_populates="inventory_item")
 
