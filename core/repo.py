@@ -323,3 +323,46 @@ def authenticate_user_plain(username: str, password: str):
         if user.password_hash == password:
             return {"id": user.id, "username": user.username, "role": user.role}
         return None
+    
+    # --- AGREGAR AL FINAL DE core/repo.py ---
+
+def list_dispatches_history():
+    """
+    Obtiene el historial completo de salidas con detalles legibles.
+    """
+    with SessionLocal() as session:
+        stmt = (
+            select(
+                Dispatch.id,
+                Dispatch.date,
+                Client.name,          # Nombre Cliente
+                Product.name,         # Nombre Producto
+                Inventory.nro_lote,
+                Inventory.sku,
+                Dispatch.quantity,
+                Dispatch.transport_guide,
+                Dispatch.obs,
+                Product.product_type  # Para calcular bultos visualmente
+            )
+            .join(Inventory, Dispatch.inventory_id == Inventory.id)
+            .join(Product, Inventory.product_id == Product.id)
+            .join(Client, Dispatch.client_id == Client.id)
+            .order_by(Dispatch.date.desc())
+        )
+        rows = session.execute(stmt).all()
+        
+        result = []
+        for r in rows:
+            result.append({
+                "id": r[0],
+                "date": r[1],
+                "client": r[2],
+                "product": r[3],
+                "lote": r[4] or "---",
+                "sku": r[5],
+                "quantity": float(r[6]),
+                "guide": r[7] or "S/G",
+                "obs": r[8] or "",
+                "type": r[9]
+            })
+        return result
