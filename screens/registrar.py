@@ -1,7 +1,7 @@
 from PySide6 import QtCore, QtWidgets, QtGui
 from core import theme, repo
 
-# --- CONFIGURACIÓN DE FACTORES ---
+# Factores de conversión
 FACTORES_CONVERSION = {
     "Tablas": 30,
     "Tablones": 20,
@@ -170,15 +170,15 @@ class RegistrarForm(QtWidgets.QWidget):
 
         self.prod_date = self._create_date_edit()
 
-        # Medidas clickeables
+        # Medidas
         self.largo = self._create_spinbox("m", 6.00) 
         self.ancho = self._create_spinbox("cm", 30.00)
         self.espesor = self._create_spinbox("cm", 30.00)
         
-        # --- CAMBIO AQUI: Cantidad ahora es Bultos ---
+        # Cantidad (BULTOS - ENTEROS)
         self.piezas = QtWidgets.QSpinBox()
         self.piezas.setRange(0, 1000000)
-        self.piezas.setSuffix(" Bultos") # Etiqueta visual
+        self.piezas.setSuffix(" Bultos")
         self.piezas.setStyleSheet(f"background-color: {theme.BG_INPUT}; color: white; border: 1px solid {theme.BORDER_COLOR}; padding: 4px; border-radius: 4px;")
 
         self.quality = self._create_combo(["Tipo 1", "Tipo 2", "Tipo 3", "Tipo 4"])
@@ -198,7 +198,7 @@ class RegistrarForm(QtWidgets.QWidget):
         self.rows['ancho'] = self._add_row(form_layout, "Ancho (Clic para medidas):", self.ancho)
         self.rows['espesor'] = self._add_row(form_layout, "Espesor (Clic para medidas):", self.espesor)
         
-        self.rows['piezas'] = self._add_row(form_layout, "Cantidad (Bultos):", self.piezas) # Etiqueta cambiada
+        self.rows['piezas'] = self._add_row(form_layout, "Cantidad (Bultos):", self.piezas)
         self.rows['quality'] = self._add_row(form_layout, "Calidad:", self.quality)
         self.rows['drying'] = self._add_row(form_layout, "Secado:", self.drying)
         self.rows['planing'] = self._add_row(form_layout, "Cepillado:", self.planing)
@@ -333,11 +333,9 @@ class RegistrarForm(QtWidgets.QWidget):
 
         if not self._validate_input(tipo): return
 
-        # --- CALCULO DE CONVERSION (BULTOS -> PIEZAS) ---
-        factor = FACTORES_CONVERSION.get(tipo, 1) # Default 1 si no encuentra
+        factor = FACTORES_CONVERSION.get(tipo, 1)
         cant_bultos = self.piezas.value()
         total_piezas = cant_bultos * factor
-        # ------------------------------------------------
 
         confirm = QtWidgets.QMessageBox.question(
             self, "Confirmar Registro",
@@ -358,12 +356,12 @@ class RegistrarForm(QtWidgets.QWidget):
             "nro_lote": self.nro_lote.text().strip(),
             "name": tipo,
             "product_type": tipo,
-            "quantity": total_piezas, # GUARDAMOS LAS PIEZAS REALES (60)
-            "unit": "pzas",           # UNIDAD ESTANDARIZADA
+            "quantity": total_piezas, 
+            "unit": "pzas",
             "largo": self.largo.value(),
             "ancho": self.ancho.value(),
             "espesor": self.espesor.value() if tipo != "Machihembrado" else 0,
-            "piezas": total_piezas,   # Mantener consistencia
+            "piezas": total_piezas, 
             "prod_date": self.prod_date.date().toString("yyyy-MM-dd"),
             "quality": self.quality.currentText(),
             "drying": self.drying.currentText(),
@@ -373,7 +371,7 @@ class RegistrarForm(QtWidgets.QWidget):
         }
 
         self.saved_signal.emit(data)
-        QtWidgets.QMessageBox.information(self, "Éxito", f"Registrado: {total_piezas} piezas en inventario.")
+        QtWidgets.QMessageBox.information(self, "Éxito", f"Registrado: {total_piezas} piezas ({cant_bultos} bultos).")
         self._clear_form()
 
     def _clear_form(self):

@@ -2,7 +2,6 @@ from PySide6 import QtCore, QtWidgets, QtGui
 from datetime import date
 from core import repo, theme
 
-# Factores de conversión
 FACTORES_CONVERSION = {
     "Tablas": 30,
     "Tablones": 20,
@@ -48,9 +47,9 @@ class DespachoScreen(QtWidgets.QWidget):
         prod_layout.addWidget(self.lbl_prod_info)
         form_layout.addRow("Producto a Despachar:", prod_layout)
 
-        self.spin_qty = QtWidgets.QDoubleSpinBox() 
+        # --- CAMBIO: SPINBOX ENTERO ---
+        self.spin_qty = QtWidgets.QSpinBox() 
         self.spin_qty.setRange(0, 999999)
-        self.spin_qty.setDecimals(1)
         self.spin_qty.setSuffix(" Bultos")
         self.spin_qty.setEnabled(False) 
         self.spin_qty.setStyleSheet(f"background-color: {theme.BG_INPUT}; color: white;")
@@ -101,14 +100,15 @@ class DespachoScreen(QtWidgets.QWidget):
         factor = FACTORES_CONVERSION.get(p_name, 1)
         bultos_disponibles = float(inv.quantity) / factor
         
+        # --- CAMBIO: Visualización Entera ---
         info = (f"PROD: {p_name} | LOTE: {inv.nro_lote or '-'}\n"
-                f"DISPONIBLE: {inv.quantity:.0f} Piezas (~{bultos_disponibles:.1f} Bultos)")
+                f"DISPONIBLE: {inv.quantity:.0f} Piezas (~{int(bultos_disponibles)} Bultos)")
         
         self.lbl_prod_info.setText(info)
         self.lbl_prod_info.setStyleSheet("color: #00f2c3; font-weight: bold;")
         
         self.spin_qty.setEnabled(True)
-        self.spin_qty.setMaximum(bultos_disponibles)
+        self.spin_qty.setMaximum(int(bultos_disponibles)) # Máximo entero
         self.spin_qty.setValue(0)
         self.spin_qty.setFocus()
 
@@ -179,7 +179,6 @@ class ProductSelectorDialog(QtWidgets.QDialog):
         layout.addWidget(self.search)
 
         self.table = QtWidgets.QTableWidget()
-        # Nuevas columnas para el buscador
         cols = ["Producto", "Lote", "SKU", "Existencia", "Bultos", "F. Prod"]
         self.table.setColumnCount(len(cols))
         self.table.setHorizontalHeaderLabels(cols)
@@ -213,8 +212,8 @@ class ProductSelectorDialog(QtWidgets.QDialog):
                 p_name,
                 inv.nro_lote or "-", 
                 inv.sku, 
-                f"{inv.quantity:.0f}", # Existencia limpia
-                f"{bultos:.1f}",       # Bultos
+                f"{inv.quantity:.0f}", 
+                f"{int(bultos)}", # --- CAMBIO: Entero visual ---
                 str(inv.prod_date)
             ]
             
