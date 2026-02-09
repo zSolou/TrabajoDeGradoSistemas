@@ -2,7 +2,7 @@ from PySide6 import QtCore, QtWidgets, QtGui
 from datetime import date
 from core import repo, theme
 
-# Factores de conversión (Unidades por bulto)
+# Factores de conversión
 FACTORES_CONVERSION = {
     "Tablas": 30,
     "Tablones": 20,
@@ -48,7 +48,6 @@ class DespachoScreen(QtWidgets.QWidget):
         prod_layout.addWidget(self.lbl_prod_info)
         form_layout.addRow("Producto a Despachar:", prod_layout)
 
-        # Input en BULTOS
         self.spin_qty = QtWidgets.QDoubleSpinBox() 
         self.spin_qty.setRange(0, 999999)
         self.spin_qty.setDecimals(1)
@@ -97,11 +96,9 @@ class DespachoScreen(QtWidgets.QWidget):
         if not self.selected_inventory: return
         
         inv = self.selected_inventory
-        # CORRECCIÓN: Usar product_name en lugar de product_type
         p_name = getattr(inv, 'product_name', 'Producto')
         
-        # Calcular equivalencia inversa
-        factor = FACTORES_CONVERSION.get(p_name, 1) # Usamos p_name como clave
+        factor = FACTORES_CONVERSION.get(p_name, 1)
         bultos_disponibles = float(inv.quantity) / factor
         
         info = (f"PROD: {p_name} | LOTE: {inv.nro_lote or '-'}\n"
@@ -125,7 +122,6 @@ class DespachoScreen(QtWidgets.QWidget):
             QtWidgets.QMessageBox.warning(self, "Error", "La cantidad debe ser mayor a 0.")
             return
 
-        # CORRECCIÓN: Obtener el tipo desde el nombre inyectado
         prod_type = getattr(self.selected_inventory, 'product_name', '')
         factor = FACTORES_CONVERSION.get(prod_type, 1)
         piezas_out = bultos_out * factor
@@ -144,7 +140,7 @@ class DespachoScreen(QtWidgets.QWidget):
                 data = {
                     "inventory_id": self.selected_inventory.id,
                     "client_id": self.cb_client.currentData(),
-                    "quantity": piezas_out, # Enviamos piezas al repo
+                    "quantity": piezas_out, 
                     "date": self.date_edit.date().toPython(),
                     "guide": self.inp_guide.text(),
                     "obs": f"Salida de {bultos_out} bultos"
@@ -164,11 +160,10 @@ class DespachoScreen(QtWidgets.QWidget):
                 QtWidgets.QMessageBox.critical(self, "Error", str(e))
 
 class ProductSelectorDialog(QtWidgets.QDialog):
-    """Buscador emergente de lotes"""
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Seleccionar Lote Disponible")
-        self.resize(750, 450)
+        self.resize(800, 450)
         self.setStyleSheet(f"background-color: {theme.BG_SIDEBAR}; color: white;")
         self.selected_data = None
         self._build_ui()
@@ -184,7 +179,8 @@ class ProductSelectorDialog(QtWidgets.QDialog):
         layout.addWidget(self.search)
 
         self.table = QtWidgets.QTableWidget()
-        cols = ["Producto", "Lote", "SKU", "Disp. (Pzas)", "Disp. (Bultos)", "F. Prod"]
+        # Nuevas columnas para el buscador
+        cols = ["Producto", "Lote", "SKU", "Existencia", "Bultos", "F. Prod"]
         self.table.setColumnCount(len(cols))
         self.table.setHorizontalHeaderLabels(cols)
         self.table.horizontalHeader().setSectionResizeMode(QtWidgets.QHeaderView.Stretch)
@@ -209,19 +205,16 @@ class ProductSelectorDialog(QtWidgets.QDialog):
             r = self.table.rowCount()
             self.table.insertRow(r)
             
-            # CORRECCIÓN: Usar product_name
             p_name = getattr(inv, 'product_name', '---')
-            
-            # Calculo visual de bultos
-            factor = FACTORES_CONVERSION.get(p_name, 1) # Usar p_name
+            factor = FACTORES_CONVERSION.get(p_name, 1)
             bultos = float(inv.quantity) / factor
 
             vals = [
                 p_name,
                 inv.nro_lote or "-", 
                 inv.sku, 
-                f"{inv.quantity:.0f}", 
-                f"{bultos:.1f}",
+                f"{inv.quantity:.0f}", # Existencia limpia
+                f"{bultos:.1f}",       # Bultos
                 str(inv.prod_date)
             ]
             
@@ -234,7 +227,6 @@ class ProductSelectorDialog(QtWidgets.QDialog):
         text = text.lower()
         filtered = []
         for inv in self.inventory_items:
-            # CORRECCIÓN: Usar product_name
             p_name = getattr(inv, 'product_name', '').lower()
             sku = (inv.sku or '').lower()
             lote = (inv.nro_lote or '').lower()

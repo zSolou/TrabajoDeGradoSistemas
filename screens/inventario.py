@@ -3,7 +3,7 @@ import os
 from PySide6 import QtCore, QtWidgets, QtGui
 from core import repo, theme
 
-# Mismos factores para mostrar equivalencias
+# Factores de conversión para visualización
 FACTORES_CONVERSION = {
     "Tablas": 30,
     "Tablones": 20,
@@ -48,9 +48,6 @@ class EditarProductoDialog(QtWidgets.QDialog):
         self.inp_ancho = self._add_spinbox(float(self.data.get('ancho', 0)), "Ancho (cm)")
         self.inp_espesor = self._add_spinbox(float(self.data.get('espesor', 0)), "Espesor (cm)")
         
-        # OJO: Piezas aquí se refiere a la medida "nro piezas" del cálculo de volumen si se usara
-        # Pero con el nuevo sistema, quantity ES las piezas. 
-        # Mantendremos este campo por si acaso es un dato técnico del lote.
         self.inp_piezas_tec = self._add_spinbox(int(self.data.get('piezas', 0)), "Ref. Piezas", is_int=True)
         
         self.inp_prod_date = self._add_date(self.data.get('prod_date'))
@@ -171,8 +168,9 @@ class InventarioScreen(QtWidgets.QWidget):
         layout.addLayout(actions_layout)
 
         self.table = QtWidgets.QTableWidget()
+        # --- COLUMNAS MODIFICADAS: Sin Unidad, Separado Existencia y Bultos ---
         columns = [
-            "ID", "SKU", "LOTE", "Producto", "Existencia (Real / Bultos)", "Unidad", 
+            "ID", "SKU", "LOTE", "Producto", "Existencia", "Bultos", 
             "Largo", "Ancho", "Espesor", "Calidad", "F. Prod", "Estado", "Obs"
         ]
         self.table.setColumnCount(len(columns))
@@ -212,22 +210,20 @@ class InventarioScreen(QtWidgets.QWidget):
             row_idx = self.table.rowCount()
             self.table.insertRow(row_idx)
             
-            # Calculo visual de bultos
+            # Calculo visual
             tipo = str(row_data.get("product_type", ""))
             qty_piezas = float(row_data.get('quantity', 0))
             factor = FACTORES_CONVERSION.get(tipo, 1)
             bultos = qty_piezas / factor
             
-            # Formato dual: "60 (2.0 Bultos)"
-            display_qty = f"{qty_piezas:.0f} ({bultos:.1f} Bultos)"
-
             valores = [
                 str(row_data.get("id", "")),
                 str(row_data.get("sku", "")),
                 str(row_data.get("nro_lote", "---")),
                 tipo,
-                display_qty, # Cantidad compuesta
-                str(row_data.get("unit", "")),
+                f"{qty_piezas:.0f}", # Existencia limpia
+                f"{bultos:.1f}",     # Bultos separado
+                # UNIDAD ELIMINADA
                 str(row_data.get("largo", 0)),
                 str(row_data.get("ancho", 0)),
                 str(row_data.get("espesor", 0)),
@@ -293,7 +289,8 @@ class InventarioScreen(QtWidgets.QWidget):
             wb = openpyxl.Workbook()
             ws = wb.active
             ws.title = "Inventario"
-            headers = ["ID", "SKU", "LOTE", "Producto", "Cantidad (Piezas)", "Bultos (Aprox)", "Unidad", "Largo", "Ancho", "Espesor", "Calidad", "F. Prod", "Estado"]
+            # Actualizado a las nuevas columnas
+            headers = ["ID", "SKU", "LOTE", "Producto", "Existencia", "Bultos", "Largo", "Ancho", "Espesor", "Calidad", "F. Prod", "Estado"]
             ws.append(headers)
             
             for r in self.all_data:
@@ -302,7 +299,7 @@ class InventarioScreen(QtWidgets.QWidget):
                 f = FACTORES_CONVERSION.get(tipo, 1)
                 ws.append([
                     r.get("id"), r.get("sku"), r.get("nro_lote"), tipo,
-                    q, q/f, r.get("unit"),
+                    q, q/f,
                     float(r.get("largo") or 0), float(r.get("ancho") or 0), float(r.get("espesor") or 0),
                     r.get("quality"), str(r.get("prod_date") or ""), str(r.get("status") or "")
                 ])
