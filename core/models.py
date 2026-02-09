@@ -119,6 +119,8 @@ class AuditLog(Base):
     occurred_at = Column(DateTime(timezone=True), server_default=func.now())
     details = Column(JSON)
 
+# Busca la clase PredefinedMeasure al final del archivo y déjala así:
+
 class PredefinedMeasure(Base):
     __tablename__ = "predefined_measures"
     id = Column(Integer, primary_key=True, index=True)
@@ -127,3 +129,4 @@ class PredefinedMeasure(Base):
     largo = Column(Numeric(10, 2))
     ancho = Column(Numeric(10, 2))
     espesor = Column(Numeric(10, 2))
+    is_active = Column(Boolean, default=True) # <--- NUEVO CAMPO

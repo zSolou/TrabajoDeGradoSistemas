@@ -230,18 +230,36 @@ def toggle_client_active(cid, active):
         c = s.get(Client, cid); 
         if c: c.is_active = active; s.commit()
 
-def create_measure(data):
-    with SessionLocal() as s:
-        m = PredefinedMeasure(product_type=data["product_type"], name=data["name"], largo=data["largo"], ancho=data["ancho"], espesor=data["espesor"])
-        s.add(m); s.commit(); return m
+# ---------- MEDIDAS PREDEFINIDAS ----------
+def create_measure(data: dict):
+    with SessionLocal() as session:
+        measure = PredefinedMeasure(
+            product_type=data.get("product_type"),
+            name=data.get("name"),
+            largo=data.get("largo"),
+            ancho=data.get("ancho"),
+            espesor=data.get("espesor"),
+            is_active=True
+        )
+        session.add(measure)
+        session.commit()
+        return measure
 
-def get_measures_by_type(ptype):
-    with SessionLocal() as s: return s.execute(select(PredefinedMeasure).where(PredefinedMeasure.product_type == ptype)).scalars().all()
+def get_measures_by_type(p_type: str):
+    with SessionLocal() as session:
+        # Solo traemos las activas (is_active == True)
+        stmt = select(PredefinedMeasure).where(
+            and_(PredefinedMeasure.product_type == p_type, PredefinedMeasure.is_active == True)
+        )
+        return session.execute(stmt).scalars().all()
 
-def delete_measure(mid):
-    with SessionLocal() as s:
-        m = s.get(PredefinedMeasure, mid); 
-        if m: s.delete(m); s.commit()
+def delete_measure(measure_id: int):
+    """Realiza un borrado lógico (desactivación)"""
+    with SessionLocal() as session:
+        measure = session.get(PredefinedMeasure, measure_id)
+        if measure:
+            measure.is_active = False # Solo desactivamos
+            session.commit()
 
 def authenticate_user_plain(u, p):
     with SessionLocal() as s:
