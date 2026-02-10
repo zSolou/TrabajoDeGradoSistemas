@@ -176,21 +176,33 @@ class RegistrarForm(QtWidgets.QWidget):
         return True
 
     def _save(self):
-        if self.is_saving: return
-        self.is_saving = True
+        t = self.product_type.currentText()
+        if t.startswith("--"): return
+        if not self._validate_input(t): return
+
+        factor = FACTORES_CONVERSION.get(t, 1)
+        total = self.piezas.value() * factor
+
+        # --- MENSAJE DE CONFIRMACIÓN DETALLADO ---
+        mensaje = (
+            f"¿Confirmar registro?\n\n"
+            f"📦 Producto: {t}\n"
+            f"🏷️ Lote: {self.nro_lote.text()}\n"
+            f"📅 Fecha Prod: {self.date.date().toString('dd/MM/yyyy')}\n"
+            f"📊 Cantidad: {self.piezas.value()} Bultos\n"
+            f"(Total piezas: {total:.0f})"
+        )
+
+        if QtWidgets.QMessageBox.question(self, "Confirmar Registro", mensaje, 
+                                          QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No) == QtWidgets.QMessageBox.No: 
+            return
+        # -----------------------------------------
+
+        # BLOQUEO BOTÓN
         self.btn_save.setEnabled(False); self.btn_save.setText("Guardando...")
-        QtWidgets.QApplication.processEvents() # Actualizar UI
+        QtWidgets.QApplication.processEvents()
 
         try:
-            t = self.product_type.currentText()
-            if t.startswith("--"): return
-            if not self._validate_input(t): return
-
-            factor = FACTORES_CONVERSION.get(t, 1)
-            total = self.piezas.value() * factor
-
-            if QtWidgets.QMessageBox.question(self, "Confirmar", f"¿Registrar Lote {self.nro_lote.text()}?", QtWidgets.QMessageBox.Yes|QtWidgets.QMessageBox.No) == QtWidgets.QMessageBox.No: return
-
             data = {
                 "sku": f"{t[:3].upper()}-{random.randint(10000,99999)}",
                 "nro_lote": self.nro_lote.text().strip(),
@@ -204,23 +216,13 @@ class RegistrarForm(QtWidgets.QWidget):
                 "planing": self.planing.currentText(), "impregnated": self.impregnated.currentText(),
                 "obs": self.obs.toPlainText()
             }
-            
-            result = repo.create_product_with_inventory(data)
-            
-            if result.get("status") == "ignored_duplicate":
-                # Éxito silencioso (para el doble clic)
-                QtWidgets.QMessageBox.information(self, "Éxito", "Registrado correctamente.")
-                self.nro_lote.clear(); self.piezas.setValue(0); self.obs.clear()
-            else:
-                # Éxito normal
-                self.saved_signal.emit(data)
-                QtWidgets.QMessageBox.information(self, "Éxito", "Registrado correctamente.")
-                self.nro_lote.clear(); self.piezas.setValue(0); self.obs.clear()
+            repo.create_product_with_inventory(data)
+            self.saved_signal.emit(data)
+            QtWidgets.QMessageBox.information(self, "Éxito", "Registrado correctamente.")
+            self.nro_lote.clear(); self.piezas.setValue(0); self.obs.clear()
         
         except Exception as e:
-            if str(e) != "Datos inválidos.": 
-                QtWidgets.QMessageBox.critical(self, "Error", str(e))
+            QtWidgets.QMessageBox.critical(self, "Error", str(e))
         
         finally:
-            self.is_saving = False
             self.btn_save.setEnabled(True); self.btn_save.setText("Guardar Producto")
