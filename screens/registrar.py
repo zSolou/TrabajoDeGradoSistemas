@@ -437,6 +437,9 @@ class RegistrarForm(QtWidgets.QWidget):
                 repo.create_product_with_inventory(data) # Guardar en BD
                 self.saved_signal.emit(data)             # Avisar a Inventario
                 
+                QtWidgets.QMessageBox.information(self, "Éxito", f"Registrado correctamente: Lote {data['nro_lote']}.")
+                self._clear_form()
+
             except Exception as e:
                 QtWidgets.QMessageBox.critical(self, "Error", f"No se pudo guardar:\n{str(e)}")
             
