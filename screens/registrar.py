@@ -2,462 +2,225 @@ import random
 from PySide6 import QtCore, QtWidgets, QtGui
 from core import theme, repo
 
-# Factores de conversión
-FACTORES_CONVERSION = {
-    "Tablas": 30,
-    "Tablones": 20,
-    "Paletas": 10,
-    "Machihembrado": 5
-}
+FACTORES_CONVERSION = { "Tablas": 30, "Tablones": 20, "Paletas": 10, "Machihembrado": 5 }
 
 class MedidasManagerDialog(QtWidgets.QDialog):
-    """Ventana para gestionar y seleccionar medidas favoritas"""
     measure_selected = QtCore.Signal(dict) 
-
     def __init__(self, product_type, parent=None):
-        super().__init__(parent)
-        self.product_type = product_type
-        self.setWindowTitle(f"Medidas: {product_type}")
-        self.resize(500, 450)
+        super().__init__(parent); self.product_type = product_type
+        self.setWindowTitle(f"Medidas: {product_type}"); self.resize(500, 450)
         self.setStyleSheet(f"background-color: {theme.BG_SIDEBAR}; color: {theme.TEXT_PRIMARY};")
-        self._build_ui()
-        self._load_measures()
+        self._build_ui(); self._load_measures()
 
     def _build_ui(self):
         layout = QtWidgets.QVBoxLayout(self)
-        
-        # Lista
         self.list_widget = QtWidgets.QListWidget()
-        self.list_widget.setStyleSheet(f"""
-            QListWidget {{ background-color: {theme.BG_INPUT}; border: 1px solid {theme.BORDER_COLOR}; border-radius: 4px; padding: 5px; }}
-            QListWidget::item {{ padding: 8px; border-bottom: 1px solid #444; }}
-            QListWidget::item:selected {{ background-color: {theme.BTN_PRIMARY}; color: white; }}
-        """)
+        self.list_widget.setStyleSheet(f"background-color: {theme.BG_INPUT}; border: 1px solid {theme.BORDER_COLOR}; border-radius: 4px; padding: 5px;")
         self.list_widget.itemDoubleClicked.connect(self._usar_medida)
         layout.addWidget(QtWidgets.QLabel("Selecciona una medida:"))
         layout.addWidget(self.list_widget)
 
-        # Formulario Nueva Medida
         new_frame = QtWidgets.QFrame()
         new_frame.setStyleSheet(f"background-color: {theme.BG_SIDEBAR}; border-top: 1px solid {theme.BORDER_COLOR}; margin-top: 10px;")
-        form_layout = QtWidgets.QHBoxLayout(new_frame)
-        form_layout.setContentsMargins(0, 15, 0, 0)
+        form = QtWidgets.QHBoxLayout(new_frame); form.setContentsMargins(0, 15, 0, 0)
         
-        self.inp_name = QtWidgets.QLineEdit(); self.inp_name.setPlaceholderText("Nombre (Ej: Estándar)")
-        self.inp_name.setStyleSheet(f"background-color: {theme.BG_INPUT}; border: 1px solid {theme.BORDER_COLOR}; padding: 4px;")
-        
-        self.inp_l = QtWidgets.QDoubleSpinBox(); self.inp_l.setSuffix(" m"); self.inp_l.setRange(0, 10); self.inp_l.setValue(0)
-        self.inp_l.setStyleSheet(f"background-color: {theme.BG_INPUT}; border: 1px solid {theme.BORDER_COLOR}; padding: 4px;")
-        
-        self.inp_a = QtWidgets.QDoubleSpinBox(); self.inp_a.setSuffix(" cm"); self.inp_a.setRange(0, 100); self.inp_a.setValue(0)
-        self.inp_a.setStyleSheet(f"background-color: {theme.BG_INPUT}; border: 1px solid {theme.BORDER_COLOR}; padding: 4px;")
-        
-        self.inp_e = QtWidgets.QDoubleSpinBox(); self.inp_e.setSuffix(" cm"); self.inp_e.setRange(0, 100); self.inp_e.setValue(0)
-        self.inp_e.setStyleSheet(f"background-color: {theme.BG_INPUT}; border: 1px solid {theme.BORDER_COLOR}; padding: 4px;")
-        
-        if self.product_type == "Machihembrado":
-            self.inp_e.setVisible(False)
+        self.inp_name = QtWidgets.QLineEdit(); self.inp_name.setPlaceholderText("Nombre")
+        self.inp_l = QtWidgets.QDoubleSpinBox(); self.inp_l.setSuffix(" m"); self.inp_l.setRange(0, 10)
+        self.inp_a = QtWidgets.QDoubleSpinBox(); self.inp_a.setSuffix(" cm"); self.inp_a.setRange(0, 100)
+        self.inp_e = QtWidgets.QDoubleSpinBox(); self.inp_e.setSuffix(" cm"); self.inp_e.setRange(0, 100)
+        for w in [self.inp_name, self.inp_l, self.inp_a, self.inp_e]: w.setStyleSheet(f"background-color: {theme.BG_INPUT}; padding: 4px;")
+        if self.product_type == "Machihembrado": self.inp_e.setVisible(False)
 
-        btn_add = QtWidgets.QPushButton("+")
-        btn_add.setCursor(QtCore.Qt.PointingHandCursor)
-        btn_add.setToolTip("Guardar nueva medida")
-        btn_add.setStyleSheet(f"background-color: {theme.BTN_SUCCESS}; color: black; font-weight: bold; padding: 5px 15px; border-radius: 4px; font-size: 14pt;")
-        btn_add.clicked.connect(self._agregar_medida)
-
-        form_layout.addWidget(self.inp_name)
-        form_layout.addWidget(self.inp_l)
-        form_layout.addWidget(self.inp_a)
-        if self.product_type != "Machihembrado":
-            form_layout.addWidget(self.inp_e)
-        form_layout.addWidget(btn_add)
+        btn_add = QtWidgets.QPushButton("+"); btn_add.clicked.connect(self._agregar_medida)
+        btn_add.setStyleSheet(f"background-color: {theme.BTN_SUCCESS}; color: black; font-weight: bold;")
         
+        form.addWidget(self.inp_name); form.addWidget(self.inp_l); form.addWidget(self.inp_a)
+        if self.product_type != "Machihembrado": form.addWidget(self.inp_e)
+        form.addWidget(btn_add)
         layout.addWidget(new_frame)
 
-        # Botones Acción
-        btn_layout = QtWidgets.QHBoxLayout()
-        
-        self.btn_del = QtWidgets.QPushButton("Desactivar Seleccionada")
-        self.btn_del.setCursor(QtCore.Qt.PointingHandCursor)
-        self.btn_del.setStyleSheet(f"background-color: {theme.BTN_DANGER}; padding: 8px; border-radius: 4px; color: white;")
-        self.btn_del.clicked.connect(self._eliminar_medida)
-        
-        self.btn_use = QtWidgets.QPushButton("✅ Usar Medida")
-        self.btn_use.setCursor(QtCore.Qt.PointingHandCursor)
-        self.btn_use.setStyleSheet(f"background-color: {theme.BTN_PRIMARY}; padding: 8px; font-weight: bold; border-radius: 4px; color: white; font-size: 11pt;")
-        self.btn_use.clicked.connect(lambda: self._usar_medida(self.list_widget.currentItem()))
-
-        btn_layout.addWidget(self.btn_del)
-        btn_layout.addStretch()
-        btn_layout.addWidget(self.btn_use)
-        layout.addLayout(btn_layout)
+        h = QtWidgets.QHBoxLayout()
+        btn_del = QtWidgets.QPushButton("Desactivar"); btn_del.clicked.connect(self._eliminar_medida)
+        btn_del.setStyleSheet(f"background-color: {theme.BTN_DANGER}; color: white; padding: 8px;")
+        btn_use = QtWidgets.QPushButton("✅ Usar"); btn_use.clicked.connect(lambda: self._usar_medida(self.list_widget.currentItem()))
+        btn_use.setStyleSheet(f"background-color: {theme.BTN_PRIMARY}; font-weight: bold; padding: 8px;")
+        h.addWidget(btn_del); h.addStretch(); h.addWidget(btn_use)
+        layout.addLayout(h)
 
     def _load_measures(self):
         self.list_widget.clear()
-        measures = repo.get_measures_by_type(self.product_type)
-        for m in measures:
-            label = f"{m.name or 'Sin Nombre'} | {m.largo}m x {m.ancho}cm"
-            if m.espesor and m.espesor > 0:
-                label += f" x {m.espesor}cm"
-            
-            item = QtWidgets.QListWidgetItem(label)
-            item.setData(QtCore.Qt.UserRole, m) 
-            self.list_widget.addItem(item)
+        for m in repo.get_measures_by_type(self.product_type):
+            lbl = f"{m.name} | {m.largo}m x {m.ancho}cm" + (f" x {m.espesor}cm" if m.espesor else "")
+            it = QtWidgets.QListWidgetItem(lbl); it.setData(QtCore.Qt.UserRole, m)
+            self.list_widget.addItem(it)
 
     def _agregar_medida(self):
-        name = self.inp_name.text().strip() or "Medida Personalizada"
-        if self.inp_l.value() == 0 or self.inp_a.value() == 0:
-             QtWidgets.QMessageBox.warning(self, "Error", "Largo y Ancho son obligatorios.")
-             return
-
-        data = {
-            "product_type": self.product_type,
-            "name": name,
-            "largo": self.inp_l.value(),
-            "ancho": self.inp_a.value(),
-            "espesor": self.inp_e.value()
-        }
-        repo.create_measure(data)
-        self._load_measures()
-        self.inp_name.clear()
+        if self.inp_l.value()==0: return
+        repo.create_measure({"product_type":self.product_type,"name":self.inp_name.text() or "Standard","largo":self.inp_l.value(),"ancho":self.inp_a.value(),"espesor":self.inp_e.value()})
+        self._load_measures(); self.inp_name.clear()
 
     def _eliminar_medida(self):
-        item = self.list_widget.currentItem()
-        if not item: return
-        m = item.data(QtCore.Qt.UserRole)
-        
-        if QtWidgets.QMessageBox.question(self, "Desactivar", f"¿Ocultar la medida '{m.name}'?", 
-            QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No) == QtWidgets.QMessageBox.Yes:
-            
-            repo.delete_measure(m.id)
-            self._load_measures()
+        it = self.list_widget.currentItem()
+        if it: 
+            if QtWidgets.QMessageBox.question(self, "Confimar", "Desactivar?") == QtWidgets.QMessageBox.Yes:
+                repo.delete_measure(it.data(QtCore.Qt.UserRole).id); self._load_measures()
 
-    def _usar_medida(self, item):
-        if not item: return
-        m = item.data(QtCore.Qt.UserRole)
-        self.measure_selected.emit({
-            "largo": m.largo,
-            "ancho": m.ancho,
-            "espesor": m.espesor
-        })
-        self.accept()
-
+    def _usar_medida(self, it):
+        if it: 
+            m = it.data(QtCore.Qt.UserRole)
+            self.measure_selected.emit({"largo":m.largo,"ancho":m.ancho,"espesor":m.espesor})
+            self.accept()
 
 class RegistrarForm(QtWidgets.QWidget):
     saved_signal = QtCore.Signal(dict)
-
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.is_saving = False
         self._build_ui()
 
     def _build_ui(self):
-        main = QtWidgets.QVBoxLayout(self)
-        main.setContentsMargins(12, 20, 12, 12)
-        main.setSpacing(10)
+        main = QtWidgets.QVBoxLayout(self); main.setContentsMargins(12, 20, 12, 12)
+        
+        lbl = QtWidgets.QLabel("REGISTRAR PRODUCTO"); lbl.setAlignment(QtCore.Qt.AlignCenter)
+        lbl.setStyleSheet(f"font-weight: bold; font-size: 20pt; color: {theme.ACCENT_COLOR};")
+        main.addWidget(lbl)
 
-        # Header
-        header_widget = QtWidgets.QWidget()
-        self.header_layout = QtWidgets.QVBoxLayout(header_widget)
-        self.header_layout.setContentsMargins(0,0,0,0)
-        self.header_layout.setSpacing(15)
-
-        self.title = QtWidgets.QLabel("REGISTRAR PRODUCTO")
-        self.title.setStyleSheet(f"font-weight: bold; font-size: 20pt; color: {theme.ACCENT_COLOR};")
-        self.title.setAlignment(QtCore.Qt.AlignCenter) 
-        self.header_layout.addWidget(self.title)
-
-        self.btn_measures = QtWidgets.QPushButton("⭐ Cargar Lista de Medidas")
-        self.btn_measures.setCursor(QtCore.Qt.PointingHandCursor)
-        self.btn_measures.setVisible(False) 
-        self.btn_measures.setStyleSheet(f"""
-            QPushButton {{ background-color: #ffc107; color: black; font-weight: bold; border-radius: 4px; padding: 6px; }}
-            QPushButton:hover {{ background-color: #ffca2c; }}
-        """)
+        self.btn_measures = QtWidgets.QPushButton("⭐ Cargar Medidas"); self.btn_measures.setVisible(False)
         self.btn_measures.clicked.connect(self._open_measures_dialog)
-        self.header_layout.addWidget(self.btn_measures)
+        self.btn_measures.setStyleSheet("background-color: #ffc107; color: black; font-weight: bold; padding: 6px;")
+        main.addWidget(self.btn_measures)
 
         self.product_type = QtWidgets.QComboBox()
-        self.product_type.setMinimumWidth(200)
-        self.product_type.addItems(["-- Seleccione Producto --", "Tablas", "Machihembrado", "Tablones", "Paletas"])
-        self.product_type.setStyleSheet(f"""
-            QComboBox {{ background-color: {theme.BG_INPUT}; color: white; border: 1px solid {theme.BORDER_COLOR}; padding: 8px; border-radius: 4px; font-size: 11pt; }}
-            QComboBox::drop-down {{ border: none; }}
-        """)
-        self.header_layout.addWidget(self.product_type)
+        self.product_type.addItems(["-- Seleccione --", "Tablas", "Machihembrado", "Tablones", "Paletas"])
+        self.product_type.setStyleSheet(f"background-color: {theme.BG_INPUT}; padding: 8px;")
+        self.product_type.currentTextChanged.connect(self._on_change); main.addWidget(self.product_type)
+
+        self.form = QtWidgets.QWidget(); self.fl = QtWidgets.QFormLayout(self.form); self.fl.setSpacing(12)
         
-        main.addWidget(header_widget)
+        self.nro_lote = QtWidgets.QLineEdit()
+        self.nro_lote.setPlaceholderText("Ej: 101")
+        self.nro_lote.setValidator(QtGui.QRegularExpressionValidator(QtCore.QRegularExpression("^[0-9]{1,3}$")))
+        self.nro_lote.setStyleSheet(f"background-color: {theme.BG_INPUT}; padding: 5px;")
 
-        # Formulario
-        self.form_container = QtWidgets.QWidget()
-        form_layout = QtWidgets.QFormLayout(self.form_container)
-        form_layout.setSpacing(12)
+        self.date = QtWidgets.QDateEdit(QtCore.QDate.currentDate()); self.date.setCalendarPopup(True)
+        self.date.setStyleSheet(f"background-color: {theme.BG_INPUT};")
 
-        self.sku = QtWidgets.QLineEdit()
-        self.sku.setVisible(False)
-
-        # --- CAMBIO 1: VALIDACIÓN DE LOTE (1-3 DÍGITOS ENTEROS) ---
-        self.nro_lote = self._create_input("Ej: 101")
-        # Regex: Solo números, de 1 a 3 caracteres
-        rx = QtCore.QRegularExpression("^[0-9]{1,3}$")
-        validator = QtGui.QRegularExpressionValidator(rx, self.nro_lote)
-        self.nro_lote.setValidator(validator)
-        # -----------------------------------------------------------
-
-        self.prod_date = self._create_date_edit()
-
-        # Medidas
-        self.largo = self._create_spinbox("m", 6.00) 
-        self.ancho = self._create_spinbox("cm", 30.00)
-        self.espesor = self._create_spinbox("cm", 30.00)
+        self.largo = self._sb("m", locked=True); self.ancho = self._sb("cm", locked=True); self.espesor = self._sb("cm", locked=True)
+        self.piezas = self._sb(" Bultos", 1000000); self.piezas.setReadOnly(False); self.piezas.setButtonSymbols(QtWidgets.QAbstractSpinBox.UpDownArrows)
         
-        self.piezas = QtWidgets.QSpinBox()
-        self.piezas.setRange(0, 1000000)
-        self.piezas.setSuffix(" Bultos")
-        self.piezas.setStyleSheet(f"background-color: {theme.BG_INPUT}; color: white; border: 1px solid {theme.BORDER_COLOR}; padding: 4px; border-radius: 4px;")
-
-        self.quality = self._create_combo(["Tipo 1", "Tipo 2", "Tipo 3", "Tipo 4"])
-        self.drying = self._create_combo(["Sí", "No"])
-        self.planing = self._create_combo(["Sí", "No"])
-        self.impregnated = self._create_combo(["Sí", "No"])
-        
-        self.obs = QtWidgets.QPlainTextEdit()
-        self.obs.setFixedHeight(60)
-        self.obs.setPlaceholderText("Observaciones opcionales...")
-        self.obs.setStyleSheet(f"background-color: {theme.BG_INPUT}; color: white; border: 1px solid {theme.BORDER_COLOR}; border-radius: 4px;")
+        self.quality = self._cb(["Tipo 1", "Tipo 2", "Tipo 3"]); self.drying = self._cb(["Sí", "No"])
+        self.planing = self._cb(["Sí", "No"]); self.impregnated = self._cb(["Sí", "No"])
+        self.obs = QtWidgets.QPlainTextEdit(); self.obs.setFixedHeight(60)
+        self.obs.setStyleSheet(f"background-color: {theme.BG_INPUT};")
 
         self.rows = {}
-        self.rows['nro_lote'] = self._add_row(form_layout, "Nro. Lote (Max 3 dígitos):", self.nro_lote)
-        self.rows['prod_date'] = self._add_row(form_layout, "Fecha Producción:", self.prod_date)
-        self.rows['largo'] = self._add_row(form_layout, "Largo (Clic para medidas):", self.largo)
-        self.rows['ancho'] = self._add_row(form_layout, "Ancho (Clic para medidas):", self.ancho)
-        self.rows['espesor'] = self._add_row(form_layout, "Espesor (Clic para medidas):", self.espesor)
-        self.rows['piezas'] = self._add_row(form_layout, "Cantidad (Bultos):", self.piezas)
-        self.rows['quality'] = self._add_row(form_layout, "Calidad:", self.quality)
-        self.rows['drying'] = self._add_row(form_layout, "Secado:", self.drying)
-        self.rows['planing'] = self._add_row(form_layout, "Cepillado:", self.planing)
-        self.rows['impregnated'] = self._add_row(form_layout, "Impregnado:", self.impregnated)
-        self.rows['obs'] = self._add_row(form_layout, "Observación:", self.obs)
-
-        self.form_container.setVisible(False)
-        main.addWidget(self.form_container)
-
-        # Botón Guardar
-        btn_layout = QtWidgets.QHBoxLayout()
-        btn_layout.addStretch()
-        self.save_btn = QtWidgets.QPushButton("Guardar Producto")
-        self.save_btn.setMinimumHeight(45)
-        self.save_btn.setMinimumWidth(200)
-        self.save_btn.setCursor(QtCore.Qt.PointingHandCursor)
-        self.save_btn.setStyleSheet(f"""
-            QPushButton {{ background-color: {theme.BTN_PRIMARY}; color: white; font-weight: bold; border-radius: 4px; font-size: 11pt; }}
-            QPushButton:hover {{ background-color: #0b5ed7; }}
-        """)
-        self.save_btn.clicked.connect(self._on_save)
-        btn_layout.addWidget(self.save_btn)
-        main.addLayout(btn_layout)
-
-        self.product_type.currentTextChanged.connect(self._on_product_change)
-
-    def eventFilter(self, source, event):
-        if event.type() == QtCore.QEvent.MouseButtonRelease:
-            if source in (self.largo, self.ancho, self.espesor):
-                if self.largo.isReadOnly():
-                    self._open_measures_dialog()
-                    return True
-        return super().eventFilter(source, event)
-
-    def _create_input(self, ph):
-        le = QtWidgets.QLineEdit()
-        le.setPlaceholderText(ph)
-        le.setStyleSheet(f"background-color: {theme.BG_INPUT}; padding: 5px; border: 1px solid {theme.BORDER_COLOR}; color: white; border-radius: 4px;")
-        return le
-
-    def _create_spinbox(self, suffix, max_val=1000.00):
-        sb = QtWidgets.QDoubleSpinBox()
-        sb.setRange(0.00, max_val)
-        sb.setDecimals(2)
-        sb.setSuffix(f" {suffix}")
+        self.rows['lote'] = self._row("Nro. Lote:", self.nro_lote)
+        self.rows['date'] = self._row("Fecha:", self.date)
+        self.rows['l'] = self._row("Largo:", self.largo)
+        self.rows['a'] = self._row("Ancho:", self.ancho)
+        self.rows['e'] = self._row("Espesor:", self.espesor)
+        self.rows['p'] = self._row("Bultos:", self.piezas)
+        self.rows['q'] = self._row("Calidad:", self.quality)
+        self.rows['d'] = self._row("Secado:", self.drying)
+        self.rows['pl'] = self._row("Cepillado:", self.planing)
+        self.rows['i'] = self._row("Impregnado:", self.impregnated)
+        self.rows['o'] = self._row("Obs:", self.obs)
         
-        sb.setReadOnly(True) 
-        sb.setButtonSymbols(QtWidgets.QAbstractSpinBox.NoButtons) 
-        sb.setCursor(QtCore.Qt.PointingHandCursor) 
-        sb.installEventFilter(self) 
+        self.form.setVisible(False); main.addWidget(self.form)
 
-        sb.setStyleSheet(f"""
-            QDoubleSpinBox {{
-                background-color: {theme.BG_INPUT}; 
-                color: white; 
-                border: 1px solid {theme.BORDER_COLOR}; 
-                padding: 4px; 
-                border-radius: 4px;
-            }}
-            QDoubleSpinBox:read-only {{
-                background-color: #2b3553; 
-                color: #a9a9b3;
-            }}
-        """)
+        self.btn_save = QtWidgets.QPushButton("Guardar Producto")
+        self.btn_save.setMinimumHeight(45); self.btn_save.clicked.connect(self._save)
+        self.btn_save.setStyleSheet(f"background-color: {theme.BTN_PRIMARY}; font-weight: bold; font-size: 11pt;")
+        main.addWidget(self.btn_save)
+
+    def eventFilter(self, s, e):
+        if e.type() == QtCore.QEvent.MouseButtonRelease and s in (self.largo, self.ancho, self.espesor):
+            self._open_measures_dialog(); return True
+        return super().eventFilter(s, e)
+
+    def _sb(self, suf, maxv=1000, locked=False):
+        sb = QtWidgets.QDoubleSpinBox() if maxv==1000 else QtWidgets.QSpinBox()
+        sb.setRange(0, maxv); sb.setSuffix(suf)
+        if locked: 
+            sb.setReadOnly(True); sb.setButtonSymbols(QtWidgets.QAbstractSpinBox.NoButtons)
+            sb.setCursor(QtCore.Qt.PointingHandCursor); sb.installEventFilter(self)
+            sb.setStyleSheet(f"background-color: #2b3553; color: gray;")
+        else: sb.setStyleSheet(f"background-color: {theme.BG_INPUT};")
         return sb
 
-    def _create_date_edit(self):
-        de = QtWidgets.QDateEdit(calendarPopup=True)
-        de.setDate(QtCore.QDate.currentDate())
-        de.setDisplayFormat("dd/MM/yyyy")
-        de.setStyleSheet(f"background-color: {theme.BG_INPUT}; color: white; border: 1px solid {theme.BORDER_COLOR}; padding: 4px; border-radius: 4px;")
-        return de
+    def _cb(self, items):
+        c = QtWidgets.QComboBox(); c.addItems(items); c.setStyleSheet(f"background-color: {theme.BG_INPUT};")
+        return c
 
-    def _create_combo(self, items):
-        cb = QtWidgets.QComboBox()
-        cb.addItems(items)
-        cb.setStyleSheet(f"""
-            QComboBox {{ background-color: {theme.BG_INPUT}; color: white; border: 1px solid {theme.BORDER_COLOR}; padding: 4px; border-radius: 4px; }}
-            QComboBox::drop-down {{ border: none; }}
-        """)
-        return cb
+    def _row(self, txt, w):
+        c = QtWidgets.QWidget(); l = QtWidgets.QHBoxLayout(c); l.setContentsMargins(0,0,0,0)
+        l.addWidget(QtWidgets.QLabel(txt)); l.addWidget(w); self.fl.addRow(c); return c
 
-    def _add_row(self, layout, label, widget):
-        container = QtWidgets.QWidget()
-        l = QtWidgets.QHBoxLayout(container)
-        l.setContentsMargins(0,0,0,0)
-        lbl = QtWidgets.QLabel(label)
-        lbl.setMinimumWidth(140)
-        lbl.setStyleSheet(f"color: {theme.TEXT_PRIMARY};")
-        l.addWidget(lbl)
-        l.addWidget(widget)
-        layout.addRow(container)
-        return container
-
-    def _on_product_change(self, text):
-        if text.startswith("--"):
-            self.form_container.setVisible(False)
-            self.btn_measures.setVisible(False)
-            self.title.setAlignment(QtCore.Qt.AlignCenter)
-            return
-        
-        self.form_container.setVisible(True)
-        self.btn_measures.setVisible(True)
-        self.btn_measures.setText(f"⭐ Ver Medidas para {text}")
-        self.title.setAlignment(QtCore.Qt.AlignLeft)
-        
-        show_map = {
-            "Tablas": ["largo", "ancho", "espesor", "piezas"],
-            "Tablones": ["largo", "ancho", "espesor", "piezas"],
-            "Paletas": ["largo", "ancho", "espesor", "piezas"],
-            "Machihembrado": ["largo", "ancho", "piezas"]
-        }
-        
-        commons = ["nro_lote", "prod_date", "quality", "drying", "planing", "impregnated", "obs"]
-        
-        for w in self.rows.values(): w.setVisible(False)
-        targets = show_map.get(text, []) + commons
-        for key in targets:
-            if key in self.rows: self.rows[key].setVisible(True)
+    def _on_change(self, t):
+        if t.startswith("--"): self.form.setVisible(False); self.btn_measures.setVisible(False); return
+        self.form.setVisible(True); self.btn_measures.setVisible(True); self.btn_measures.setText(f"⭐ Medidas {t}")
+        v = ["lote", "date", "q", "d", "pl", "i", "o", "l", "a", "p"]
+        if t != "Machihembrado": v.append("e")
+        for k, w in self.rows.items(): w.setVisible(k in v)
 
     def _open_measures_dialog(self):
-        ptype = self.product_type.currentText()
-        if ptype.startswith("--"): return
-        dialog = MedidasManagerDialog(ptype, self)
-        dialog.measure_selected.connect(self._apply_measure)
-        dialog.exec_()
+        d = MedidasManagerDialog(self.product_type.currentText(), self)
+        d.measure_selected.connect(lambda x: (self.largo.setValue(x["largo"]), self.ancho.setValue(x["ancho"]), self.espesor.setValue(x["espesor"])))
+        d.exec_()
 
-    def _apply_measure(self, data):
-        if "largo" in data: self.largo.setValue(float(data["largo"]))
-        if "ancho" in data: self.ancho.setValue(float(data["ancho"]))
-        if "espesor" in data: self.espesor.setValue(float(data["espesor"]))
-        QtWidgets.QMessageBox.information(self, "Medida Aplicada", "Se han cargado las dimensiones correctamente.")
-
-    def _validate_input(self, tipo):
-        if self.piezas.value() <= 0:
-            QtWidgets.QMessageBox.warning(self, "Dato Faltante", "El número de **Bultos** no puede ser 0.")
-            self.piezas.setFocus()
-            return False
-        
-        if not self.nro_lote.text().strip():
-            QtWidgets.QMessageBox.warning(self, "Falta Lote", "Debe ingresar un **Número de Lote** (1-3 dígitos).")
-            self.nro_lote.setFocus()
-            return False
-
-        if tipo in ("Tablas", "Tablones", "Paletas"):
-            if self.largo.value() <= 0 or self.ancho.value() <= 0 or self.espesor.value() <= 0:
-                QtWidgets.QMessageBox.warning(self, "Medidas", "Haga clic en los campos de medida para seleccionar una válida.")
-                return False
-        elif tipo == "Machihembrado":
-            if self.largo.value() <= 0 or self.ancho.value() <= 0:
-                QtWidgets.QMessageBox.warning(self, "Medidas", "Haga clic en los campos de medida para seleccionar una válida.")
-                return False
+    # --- ESTA FUNCION ESTÁ DENTRO DE LA CLASE AHORA ---
+    def _validate_input(self, t):
+        if self.piezas.value() <= 0: QtWidgets.QMessageBox.warning(self, "Error", "Faltan Bultos"); return False
+        if not self.nro_lote.text().strip(): QtWidgets.QMessageBox.warning(self, "Error", "Falta Lote"); return False
+        if t!="Machihembrado" and self.espesor.value()<=0: QtWidgets.QMessageBox.warning(self, "Error", "Falta Espesor"); return False
         return True
 
-    def _on_save(self):
-            tipo = self.product_type.currentText()
-            if tipo.startswith("--"):
-                QtWidgets.QMessageBox.warning(self, "Error", "Seleccione un tipo de producto.")
-                return
+    def _save(self):
+        if self.is_saving: return
+        self.is_saving = True
+        self.btn_save.setEnabled(False); self.btn_save.setText("Guardando...")
+        QtWidgets.QApplication.processEvents() # Actualizar UI
 
-            if not self._validate_input(tipo): return
+        try:
+            t = self.product_type.currentText()
+            if t.startswith("--"): return
+            if not self._validate_input(t): return
 
-            factor = FACTORES_CONVERSION.get(tipo, 1)
-            cant_bultos = self.piezas.value()
-            total_piezas = cant_bultos * factor
+            factor = FACTORES_CONVERSION.get(t, 1)
+            total = self.piezas.value() * factor
 
-            # Confirmación
-            confirm = QtWidgets.QMessageBox.question(
-                self, "Confirmar Registro",
-                f"Producto: {tipo}\nLote: {self.nro_lote.text()}\n"
-                f"Entrada: {cant_bultos} Bultos\nTotal Real: {total_piezas} Piezas\n\n¿Es correcto?",
-                QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No
-            )
-            if confirm == QtWidgets.QMessageBox.No: return
+            if QtWidgets.QMessageBox.question(self, "Confirmar", f"¿Registrar Lote {self.nro_lote.text()}?", QtWidgets.QMessageBox.Yes|QtWidgets.QMessageBox.No) == QtWidgets.QMessageBox.No: return
 
-            # --- BLOQUEAR BOTÓN (Evita doble clic) ---
-            self.save_btn.setEnabled(False)
-            self.save_btn.setText("Guardando...")
-            QtWidgets.QApplication.processEvents() # Forzar actualización visual
-            # ----------------------------------------
-
-            try:
-                sku = self._generate_sku(tipo)
-                
-                data = {
-                    "sku": sku,
-                    "nro_lote": self.nro_lote.text().strip(),
-                    "name": tipo,
-                    "product_type": tipo,
-                    "quantity": total_piezas,
-                    "unit": "pzas",
-                    "largo": self.largo.value(),
-                    "ancho": self.ancho.value(),
-                    "espesor": self.espesor.value() if tipo != "Machihembrado" else 0,
-                    "piezas": total_piezas,
-                    "prod_date": self.prod_date.date().toString("yyyy-MM-dd"),
-                    "quality": self.quality.currentText(),
-                    "drying": self.drying.currentText(),
-                    "planing": self.planing.currentText(),
-                    "impregnated": self.impregnated.currentText(),
-                    "obs": self.obs.toPlainText() + f"\n(Original: {cant_bultos} Bultos)"
-                }
-
-                repo.create_product_with_inventory(data) # Guardar en BD
-                self.saved_signal.emit(data)             # Avisar a Inventario
-                
-                QtWidgets.QMessageBox.information(self, "Éxito", f"Registrado correctamente: Lote {data['nro_lote']}.")
-                self._clear_form()
-
-            except Exception as e:
-                QtWidgets.QMessageBox.critical(self, "Error", f"No se pudo guardar:\n{str(e)}")
+            data = {
+                "sku": f"{t[:3].upper()}-{random.randint(10000,99999)}",
+                "nro_lote": self.nro_lote.text().strip(),
+                "name": t, "product_type": t,
+                "quantity": total, "unit": "pzas",
+                "largo": self.largo.value(), "ancho": self.ancho.value(),
+                "espesor": self.espesor.value() if t!="Machihembrado" else 0,
+                "piezas": total,
+                "prod_date": self.date.date().toString("yyyy-MM-dd"),
+                "quality": self.quality.currentText(), "drying": self.drying.currentText(),
+                "planing": self.planing.currentText(), "impregnated": self.impregnated.currentText(),
+                "obs": self.obs.toPlainText()
+            }
             
-            finally:
-                # --- RESTAURAR BOTÓN ---
-                self.save_btn.setEnabled(True)
-                self.save_btn.setText("Guardar Producto")
-
-    def _clear_form(self):
-        self.nro_lote.clear()
-        self.largo.setValue(0); self.ancho.setValue(0); self.espesor.setValue(0); self.piezas.setValue(0)
-        self.obs.clear()
-        self.prod_date.setDate(QtCore.QDate.currentDate())
-
-    # --- CAMBIO 2: SKU NORMALIZADO CON SUFIJO 5 DÍGITOS ---
-    def _generate_sku(self, base: str) -> str:
-        # Nombre completo limpio (Ej: MACHIHEMBRADO -> MACHIHEMBRADO)
-        base_clean = "".join(ch for ch in base.upper() if ch.isalnum())
-        # Sufijo aleatorio de 5 dígitos (10000 - 99999)
-        suffix = random.randint(10000, 99999)
-        return f"{base_clean}-{suffix}"
+            result = repo.create_product_with_inventory(data)
+            
+            if result.get("status") == "ignored_duplicate":
+                # Éxito silencioso (para el doble clic)
+                QtWidgets.QMessageBox.information(self, "Éxito", "Registrado correctamente.")
+                self.nro_lote.clear(); self.piezas.setValue(0); self.obs.clear()
+            else:
+                # Éxito normal
+                self.saved_signal.emit(data)
+                QtWidgets.QMessageBox.information(self, "Éxito", "Registrado correctamente.")
+                self.nro_lote.clear(); self.piezas.setValue(0); self.obs.clear()
+        
+        except Exception as e:
+            if str(e) != "Datos inválidos.": 
+                QtWidgets.QMessageBox.critical(self, "Error", str(e))
+        
+        finally:
+            self.is_saving = False
+            self.btn_save.setEnabled(True); self.btn_save.setText("Guardar Producto")
