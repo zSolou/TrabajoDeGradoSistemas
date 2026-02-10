@@ -1,3 +1,4 @@
+import random
 from PySide6 import QtCore, QtWidgets, QtGui
 from core import theme, repo
 
@@ -72,15 +73,15 @@ class MedidasManagerDialog(QtWidgets.QDialog):
         
         layout.addWidget(new_frame)
 
-        # --- BOTONES DE ACCIÓN (Restaurados) ---
+        # Botones Acción
         btn_layout = QtWidgets.QHBoxLayout()
         
-        self.btn_del = QtWidgets.QPushButton("Desactivar Seleccionada") # Cambiado texto
+        self.btn_del = QtWidgets.QPushButton("Desactivar Seleccionada")
         self.btn_del.setCursor(QtCore.Qt.PointingHandCursor)
         self.btn_del.setStyleSheet(f"background-color: {theme.BTN_DANGER}; padding: 8px; border-radius: 4px; color: white;")
         self.btn_del.clicked.connect(self._eliminar_medida)
         
-        self.btn_use = QtWidgets.QPushButton("✅ Usar Medida") # BOTÓN RESTAURADO
+        self.btn_use = QtWidgets.QPushButton("✅ Usar Medida")
         self.btn_use.setCursor(QtCore.Qt.PointingHandCursor)
         self.btn_use.setStyleSheet(f"background-color: {theme.BTN_PRIMARY}; padding: 8px; font-weight: bold; border-radius: 4px; color: white; font-size: 11pt;")
         self.btn_use.clicked.connect(lambda: self._usar_medida(self.list_widget.currentItem()))
@@ -124,11 +125,10 @@ class MedidasManagerDialog(QtWidgets.QDialog):
         if not item: return
         m = item.data(QtCore.Qt.UserRole)
         
-        # Confirmación de desactivación
         if QtWidgets.QMessageBox.question(self, "Desactivar", f"¿Ocultar la medida '{m.name}'?", 
             QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No) == QtWidgets.QMessageBox.Yes:
             
-            repo.delete_measure(m.id) # Ahora esto solo desactiva
+            repo.delete_measure(m.id)
             self._load_measures()
 
     def _usar_medida(self, item):
@@ -165,7 +165,6 @@ class RegistrarForm(QtWidgets.QWidget):
         self.title.setAlignment(QtCore.Qt.AlignCenter) 
         self.header_layout.addWidget(self.title)
 
-        # Botón Acceso Directo a Medidas
         self.btn_measures = QtWidgets.QPushButton("⭐ Cargar Lista de Medidas")
         self.btn_measures.setCursor(QtCore.Qt.PointingHandCursor)
         self.btn_measures.setVisible(False) 
@@ -195,18 +194,21 @@ class RegistrarForm(QtWidgets.QWidget):
         self.sku = QtWidgets.QLineEdit()
         self.sku.setVisible(False)
 
-        self.nro_lote = QtWidgets.QLineEdit()
-        self.nro_lote.setPlaceholderText("Ej: L-2026-A")
-        self.nro_lote.setStyleSheet(f"background-color: {theme.BG_INPUT}; color: white; border: 1px solid {theme.BORDER_COLOR}; padding: 5px; border-radius: 4px;")
+        # --- CAMBIO 1: VALIDACIÓN DE LOTE (1-3 DÍGITOS ENTEROS) ---
+        self.nro_lote = self._create_input("Ej: 101")
+        # Regex: Solo números, de 1 a 3 caracteres
+        rx = QtCore.QRegularExpression("^[0-9]{1,3}$")
+        validator = QtGui.QRegularExpressionValidator(rx, self.nro_lote)
+        self.nro_lote.setValidator(validator)
+        # -----------------------------------------------------------
 
         self.prod_date = self._create_date_edit()
 
-        # Medidas (Bloqueadas y Clickables)
+        # Medidas
         self.largo = self._create_spinbox("m", 6.00) 
         self.ancho = self._create_spinbox("cm", 30.00)
         self.espesor = self._create_spinbox("cm", 30.00)
         
-        # Cantidad en Bultos
         self.piezas = QtWidgets.QSpinBox()
         self.piezas.setRange(0, 1000000)
         self.piezas.setSuffix(" Bultos")
@@ -223,7 +225,7 @@ class RegistrarForm(QtWidgets.QWidget):
         self.obs.setStyleSheet(f"background-color: {theme.BG_INPUT}; color: white; border: 1px solid {theme.BORDER_COLOR}; border-radius: 4px;")
 
         self.rows = {}
-        self.rows['nro_lote'] = self._add_row(form_layout, "Nro. Lote / Código:", self.nro_lote)
+        self.rows['nro_lote'] = self._add_row(form_layout, "Nro. Lote (Max 3 dígitos):", self.nro_lote)
         self.rows['prod_date'] = self._add_row(form_layout, "Fecha Producción:", self.prod_date)
         self.rows['largo'] = self._add_row(form_layout, "Largo (Clic para medidas):", self.largo)
         self.rows['ancho'] = self._add_row(form_layout, "Ancho (Clic para medidas):", self.ancho)
@@ -256,7 +258,6 @@ class RegistrarForm(QtWidgets.QWidget):
         self.product_type.currentTextChanged.connect(self._on_product_change)
 
     def eventFilter(self, source, event):
-        """Detecta clic en los campos de medidas bloqueados"""
         if event.type() == QtCore.QEvent.MouseButtonRelease:
             if source in (self.largo, self.ancho, self.espesor):
                 if self.largo.isReadOnly():
@@ -264,13 +265,18 @@ class RegistrarForm(QtWidgets.QWidget):
                     return True
         return super().eventFilter(source, event)
 
+    def _create_input(self, ph):
+        le = QtWidgets.QLineEdit()
+        le.setPlaceholderText(ph)
+        le.setStyleSheet(f"background-color: {theme.BG_INPUT}; padding: 5px; border: 1px solid {theme.BORDER_COLOR}; color: white; border-radius: 4px;")
+        return le
+
     def _create_spinbox(self, suffix, max_val=1000.00):
         sb = QtWidgets.QDoubleSpinBox()
         sb.setRange(0.00, max_val)
         sb.setDecimals(2)
         sb.setSuffix(f" {suffix}")
         
-        # Bloqueo para obligar a usar el selector
         sb.setReadOnly(True) 
         sb.setButtonSymbols(QtWidgets.QAbstractSpinBox.NoButtons) 
         sb.setCursor(QtCore.Qt.PointingHandCursor) 
@@ -365,7 +371,7 @@ class RegistrarForm(QtWidgets.QWidget):
             return False
         
         if not self.nro_lote.text().strip():
-            QtWidgets.QMessageBox.warning(self, "Falta Lote", "Debe ingresar un **Número de Lote**.")
+            QtWidgets.QMessageBox.warning(self, "Falta Lote", "Debe ingresar un **Número de Lote** (1-3 dígitos).")
             self.nro_lote.setFocus()
             return False
 
@@ -387,7 +393,6 @@ class RegistrarForm(QtWidgets.QWidget):
 
         if not self._validate_input(tipo): return
 
-        # Conversión
         factor = FACTORES_CONVERSION.get(tipo, 1)
         cant_bultos = self.piezas.value()
         total_piezas = cant_bultos * factor
@@ -422,7 +427,7 @@ class RegistrarForm(QtWidgets.QWidget):
         }
 
         try:
-            repo.create_product_with_inventory(data) # GUARDAR EN DB
+            repo.create_product_with_inventory(data)
             self.saved_signal.emit(data)
             QtWidgets.QMessageBox.information(self, "Éxito", f"Registrado: {total_piezas} piezas en inventario.")
             self._clear_form()
@@ -435,7 +440,10 @@ class RegistrarForm(QtWidgets.QWidget):
         self.obs.clear()
         self.prod_date.setDate(QtCore.QDate.currentDate())
 
+    # --- CAMBIO 2: SKU NORMALIZADO CON SUFIJO 5 DÍGITOS ---
     def _generate_sku(self, base: str) -> str:
-        base_clean = "".join(ch for ch in base.upper() if ch.isalnum())[:3]
-        ts = QtCore.QDateTime.currentDateTime().toString("ddHHmmss")
-        return f"{base_clean}-{ts}"
+        # Nombre completo limpio (Ej: MACHIHEMBRADO -> MACHIHEMBRADO)
+        base_clean = "".join(ch for ch in base.upper() if ch.isalnum())
+        # Sufijo aleatorio de 5 dígitos (10000 - 99999)
+        suffix = random.randint(10000, 99999)
+        return f"{base_clean}-{suffix}"
