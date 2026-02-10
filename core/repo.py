@@ -23,18 +23,35 @@ def create_product_with_inventory(data: dict):
         try:
             sku = (data.get("sku") or "").strip()
             name = (data.get("name") or data.get("product_type") or "").strip()
+            nro_lote = (data.get("nro_lote") or "").strip()
+            
             if not sku or not name: raise ValueError("SKU y Nombre obligatorios.")
+            if not nro_lote: raise ValueError("El Número de Lote es obligatorio.")
 
+            # --- CORRECCIÓN: IDEMPOTENCIA (Si existe, no hacer nada y devolver éxito) ---
+            lote_existe = session.execute(
+                select(Inventory).where(Inventory.nro_lote == nro_lote)
+            ).scalars().first()
+            
+            if lote_existe:
+                # En lugar de error, retornamos el ID existente.
+                # El frontend pensará que se guardó correctamente (que es verdad).
+                # Esto elimina el mensaje de error por doble clic.
+                return {"inventory_id": lote_existe.id}
+            # --------------------------------------------------------------------------
+
+            # 1. Buscar o Crear Producto en Catálogo
             prod = session.execute(select(Product).where(Product.sku == sku)).scalars().first()
             if not prod:
                 prod = Product(sku=sku, name=name, unit=data.get("unit"), quality=data.get("quality"))
                 session.add(prod)
                 session.flush()
 
+            # 2. Crear Registro de Inventario
             inv = Inventory(
                 product_id=prod.id,
                 sku=sku,
-                nro_lote=data.get("nro_lote"),
+                nro_lote=nro_lote,
                 quantity=Decimal(str(data.get("quantity") or 0)),
                 largo=Decimal(str(data.get("largo"))) if data.get("largo") else None,
                 ancho=Decimal(str(data.get("ancho"))) if data.get("ancho") else None,
@@ -51,12 +68,18 @@ def create_product_with_inventory(data: dict):
             session.add(inv)
             session.flush()
             
+            # 3. Registrar Movimiento Inicial
             if inv.quantity != 0:
                 mv = Movement(
-                    inventory_id=inv.id, product_id=prod.id, change_quantity=inv.quantity,
-                    movement_type="IN", reference=f"Prod. Lote {inv.nro_lote}", notes="Producción inicial"
+                    inventory_id=inv.id,
+                    product_id=prod.id,
+                    change_quantity=inv.quantity,
+                    movement_type="IN",
+                    reference=f"Prod. Lote {inv.nro_lote}",
+                    notes="Producción inicial"
                 )
                 session.add(mv)
+
             session.commit()
             return {"inventory_id": inv.id}
         except:
@@ -64,9 +87,6 @@ def create_product_with_inventory(data: dict):
             raise
 
 def list_inventory_rows():
-    """
-    Lista el inventario incluyendo detalles técnicos (Secado, Cepillado, etc).
-    """
     with SessionLocal() as session:
         stmt = (
             select(
@@ -76,10 +96,10 @@ def list_inventory_rows():
                 Inventory.largo, Inventory.ancho, Inventory.espesor,
                 Inventory.piezas, Inventory.quality, Inventory.prod_date,
                 Inventory.status, Inventory.obs, 
-                Product.name, # Mapeado a product_type
-                Inventory.drying,      # <--- NUEVO
-                Inventory.planing,     # <--- NUEVO
-                Inventory.impregnated  # <--- NUEVO
+                Product.name,
+                Inventory.drying,
+                Inventory.planing,
+                Inventory.impregnated
             ).join(Product, Product.id == Inventory.product_id)
             .order_by(Inventory.created_at.desc())
         )
@@ -93,9 +113,9 @@ def list_inventory_rows():
                 "piezas": int(r[9] or 0), "quality": r[10], "prod_date": r[11],
                 "status": r[12], "obs": r[13], 
                 "product_type": r[14],
-                "drying": r[15],       # <--- NUEVO
-                "planing": r[16],      # <--- NUEVO
-                "impregnated": r[17]   # <--- NUEVO
+                "drying": r[15],
+                "planing": r[16],
+                "impregnated": r[17]
             })
         return result
 

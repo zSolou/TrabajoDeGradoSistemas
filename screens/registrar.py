@@ -386,53 +386,64 @@ class RegistrarForm(QtWidgets.QWidget):
         return True
 
     def _on_save(self):
-        tipo = self.product_type.currentText()
-        if tipo.startswith("--"):
-            QtWidgets.QMessageBox.warning(self, "Error", "Seleccione un tipo de producto.")
-            return
+            tipo = self.product_type.currentText()
+            if tipo.startswith("--"):
+                QtWidgets.QMessageBox.warning(self, "Error", "Seleccione un tipo de producto.")
+                return
 
-        if not self._validate_input(tipo): return
+            if not self._validate_input(tipo): return
 
-        factor = FACTORES_CONVERSION.get(tipo, 1)
-        cant_bultos = self.piezas.value()
-        total_piezas = cant_bultos * factor
+            factor = FACTORES_CONVERSION.get(tipo, 1)
+            cant_bultos = self.piezas.value()
+            total_piezas = cant_bultos * factor
 
-        confirm = QtWidgets.QMessageBox.question(
-            self, "Confirmar Registro",
-            f"Producto: {tipo}\nLote: {self.nro_lote.text()}\n"
-            f"Entrada: {cant_bultos} Bultos\nTotal Real: {total_piezas} Piezas\n\n¿Es correcto?",
-            QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No
-        )
-        if confirm == QtWidgets.QMessageBox.No: return
+            # Confirmación
+            confirm = QtWidgets.QMessageBox.question(
+                self, "Confirmar Registro",
+                f"Producto: {tipo}\nLote: {self.nro_lote.text()}\n"
+                f"Entrada: {cant_bultos} Bultos\nTotal Real: {total_piezas} Piezas\n\n¿Es correcto?",
+                QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No
+            )
+            if confirm == QtWidgets.QMessageBox.No: return
 
-        sku = self._generate_sku(tipo)
-        
-        data = {
-            "sku": sku,
-            "nro_lote": self.nro_lote.text().strip(),
-            "name": tipo,
-            "product_type": tipo,
-            "quantity": total_piezas,
-            "unit": "pzas",
-            "largo": self.largo.value(),
-            "ancho": self.ancho.value(),
-            "espesor": self.espesor.value() if tipo != "Machihembrado" else 0,
-            "piezas": total_piezas,
-            "prod_date": self.prod_date.date().toString("yyyy-MM-dd"),
-            "quality": self.quality.currentText(),
-            "drying": self.drying.currentText(),
-            "planing": self.planing.currentText(),
-            "impregnated": self.impregnated.currentText(),
-            "obs": self.obs.toPlainText() + f"\n(Original: {cant_bultos} Bultos)"
-        }
+            # --- BLOQUEAR BOTÓN (Evita doble clic) ---
+            self.save_btn.setEnabled(False)
+            self.save_btn.setText("Guardando...")
+            QtWidgets.QApplication.processEvents() # Forzar actualización visual
+            # ----------------------------------------
 
-        try:
-            repo.create_product_with_inventory(data)
-            self.saved_signal.emit(data)
-            QtWidgets.QMessageBox.information(self, "Éxito", f"Registrado: {total_piezas} piezas en inventario.")
-            self._clear_form()
-        except Exception as e:
-            QtWidgets.QMessageBox.critical(self, "Error", f"No se pudo guardar:\n{e}")
+            try:
+                sku = self._generate_sku(tipo)
+                
+                data = {
+                    "sku": sku,
+                    "nro_lote": self.nro_lote.text().strip(),
+                    "name": tipo,
+                    "product_type": tipo,
+                    "quantity": total_piezas,
+                    "unit": "pzas",
+                    "largo": self.largo.value(),
+                    "ancho": self.ancho.value(),
+                    "espesor": self.espesor.value() if tipo != "Machihembrado" else 0,
+                    "piezas": total_piezas,
+                    "prod_date": self.prod_date.date().toString("yyyy-MM-dd"),
+                    "quality": self.quality.currentText(),
+                    "drying": self.drying.currentText(),
+                    "planing": self.planing.currentText(),
+                    "impregnated": self.impregnated.currentText(),
+                    "obs": self.obs.toPlainText() + f"\n(Original: {cant_bultos} Bultos)"
+                }
+
+                repo.create_product_with_inventory(data) # Guardar en BD
+                self.saved_signal.emit(data)             # Avisar a Inventario
+                
+            except Exception as e:
+                QtWidgets.QMessageBox.critical(self, "Error", f"No se pudo guardar:\n{str(e)}")
+            
+            finally:
+                # --- RESTAURAR BOTÓN ---
+                self.save_btn.setEnabled(True)
+                self.save_btn.setText("Guardar Producto")
 
     def _clear_form(self):
         self.nro_lote.clear()
