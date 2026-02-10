@@ -2,6 +2,7 @@ from PySide6 import QtCore, QtWidgets, QtGui
 from datetime import date
 from core import repo, theme
 
+# Factores de conversión
 FACTORES_CONVERSION = {
     "Tablas": 30,
     "Tablones": 20,
@@ -47,7 +48,6 @@ class DespachoScreen(QtWidgets.QWidget):
         prod_layout.addWidget(self.lbl_prod_info)
         form_layout.addRow("Producto a Despachar:", prod_layout)
 
-        # --- CAMBIO: SPINBOX ENTERO ---
         self.spin_qty = QtWidgets.QSpinBox() 
         self.spin_qty.setRange(0, 999999)
         self.spin_qty.setSuffix(" Bultos")
@@ -100,15 +100,21 @@ class DespachoScreen(QtWidgets.QWidget):
         factor = FACTORES_CONVERSION.get(p_name, 1)
         bultos_disponibles = float(inv.quantity) / factor
         
-        # --- CAMBIO: Visualización Entera ---
+        # Formatear fecha de producción para mostrar
+        f_prod = "Sin Fecha"
+        if inv.prod_date:
+            f_prod = inv.prod_date.strftime("%d/%m/%Y")
+
+        # --- CAMBIO: Mostrar Fecha de Producción en el resumen ---
         info = (f"PROD: {p_name} | LOTE: {inv.nro_lote or '-'}\n"
+                f"📅 FABRICADO: {f_prod}\n" 
                 f"DISPONIBLE: {inv.quantity:.0f} Piezas (~{int(bultos_disponibles)} Bultos)")
         
         self.lbl_prod_info.setText(info)
         self.lbl_prod_info.setStyleSheet("color: #00f2c3; font-weight: bold;")
         
         self.spin_qty.setEnabled(True)
-        self.spin_qty.setMaximum(int(bultos_disponibles)) # Máximo entero
+        self.spin_qty.setMaximum(int(bultos_disponibles))
         self.spin_qty.setValue(0)
         self.spin_qty.setFocus()
 
@@ -121,6 +127,25 @@ class DespachoScreen(QtWidgets.QWidget):
         if bultos_out <= 0:
             QtWidgets.QMessageBox.warning(self, "Error", "La cantidad debe ser mayor a 0.")
             return
+
+        # --- CAMBIO: VALIDACIÓN DE FECHAS ---
+        fecha_despacho = self.date_edit.date()
+        
+        # Convertir fecha de producción (objeto date de python) a QDate para comparar
+        if self.selected_inventory.prod_date:
+            py_date = self.selected_inventory.prod_date
+            fecha_prod = QtCore.QDate(py_date.year, py_date.month, py_date.day)
+            
+            if fecha_despacho < fecha_prod:
+                QtWidgets.QMessageBox.warning(
+                    self, "Fecha Inválida", 
+                    f"⛔ No se puede despachar antes de producir.\n\n"
+                    f"Fecha Producción: {fecha_prod.toString('dd/MM/yyyy')}\n"
+                    f"Fecha Despacho: {fecha_despacho.toString('dd/MM/yyyy')}\n\n"
+                    "Por favor, corrija la fecha de despacho."
+                )
+                return
+        # ------------------------------------
 
         prod_type = getattr(self.selected_inventory, 'product_name', '')
         factor = FACTORES_CONVERSION.get(prod_type, 1)
@@ -213,8 +238,8 @@ class ProductSelectorDialog(QtWidgets.QDialog):
                 inv.nro_lote or "-", 
                 inv.sku, 
                 f"{inv.quantity:.0f}", 
-                f"{int(bultos)}", # --- CAMBIO: Entero visual ---
-                str(inv.prod_date)
+                f"{int(bultos)}", 
+                str(inv.prod_date) # Ya muestra la fecha aquí
             ]
             
             for i, v in enumerate(vals):
