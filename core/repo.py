@@ -51,7 +51,6 @@ def create_product_with_inventory(data: dict):
             session.add(inv)
             session.flush()
             
-            # Movimiento Inicial
             if inv.quantity != 0:
                 mv = Movement(
                     inventory_id=inv.id, product_id=prod.id, change_quantity=inv.quantity,
@@ -65,14 +64,22 @@ def create_product_with_inventory(data: dict):
             raise
 
 def list_inventory_rows():
+    """
+    Lista el inventario incluyendo detalles técnicos (Secado, Cepillado, etc).
+    """
     with SessionLocal() as session:
         stmt = (
             select(
-                Inventory.id, Inventory.sku, Inventory.nro_lote, Product.name,
+                Inventory.id, Inventory.sku, Inventory.nro_lote, 
+                Product.name,
                 Inventory.quantity, Product.unit,
                 Inventory.largo, Inventory.ancho, Inventory.espesor,
                 Inventory.piezas, Inventory.quality, Inventory.prod_date,
-                Inventory.status, Inventory.obs, Product.product_type
+                Inventory.status, Inventory.obs, 
+                Product.name, # Mapeado a product_type
+                Inventory.drying,      # <--- NUEVO
+                Inventory.planing,     # <--- NUEVO
+                Inventory.impregnated  # <--- NUEVO
             ).join(Product, Product.id == Inventory.product_id)
             .order_by(Inventory.created_at.desc())
         )
@@ -84,7 +91,11 @@ def list_inventory_rows():
                 "product_name": r[3], "quantity": float(r[4] or 0), "unit": r[5],
                 "largo": float(r[6] or 0), "ancho": float(r[7] or 0), "espesor": float(r[8] or 0),
                 "piezas": int(r[9] or 0), "quality": r[10], "prod_date": r[11],
-                "status": r[12], "obs": r[13], "product_type": r[14] # Para conversión bultos
+                "status": r[12], "obs": r[13], 
+                "product_type": r[14],
+                "drying": r[15],       # <--- NUEVO
+                "planing": r[16],      # <--- NUEVO
+                "impregnated": r[17]   # <--- NUEVO
             })
         return result
 
@@ -115,17 +126,16 @@ def delete_inventory(inventory_id: int):
 def get_available_inventory():
     with SessionLocal() as session:
         stmt = (
-            select(Inventory, Product.name, Product.product_type) # Traemos inventory y datos de product
+            select(Inventory, Product.name)
             .join(Product, Inventory.product_id == Product.id)
             .where(and_(Inventory.quantity > 0, Inventory.status == 'DISPONIBLE'))
             .order_by(Inventory.prod_date)
         )
         results = session.execute(stmt).all()
         data = []
-        for inv, p_name, p_type in results:
-            # Inyectamos datos del producto al objeto Inventory temporalmente para la UI
+        for inv, p_name in results:
             inv.product_name = p_name 
-            inv.product_type = p_type # Necesario para el calculo de bultos en despacho.py
+            inv.product_type = p_name 
             data.append(inv)
         return data
 
@@ -162,22 +172,13 @@ def create_dispatch(data: dict):
         session.commit()
         return new_dispatch.id
 
-# --- ESTA ES LA FUNCIÓN QUE FALTABA PARA VER EL HISTORIAL ---
 def list_dispatches_history():
-    """Recupera la lista de despachos uniendo las tablas necesarias."""
     with SessionLocal() as session:
         stmt = (
             select(
-                Dispatch.id,
-                Dispatch.date,
-                Client.name,          # Nombre Cliente
-                Product.name,         # Nombre Producto
-                Inventory.nro_lote,
-                Inventory.sku,
-                Dispatch.quantity,
-                Dispatch.transport_guide,
-                Dispatch.obs,
-                Product.product_type  # Para calcular bultos visualmente
+                Dispatch.id, Dispatch.date, Client.name, Product.name,
+                Inventory.nro_lote, Inventory.sku, Dispatch.quantity,
+                Dispatch.transport_guide, Dispatch.obs, Product.name
             )
             .join(Inventory, Dispatch.inventory_id == Inventory.id)
             .join(Product, Inventory.product_id == Product.id)
@@ -185,24 +186,16 @@ def list_dispatches_history():
             .order_by(Dispatch.date.desc())
         )
         rows = session.execute(stmt).all()
-        
         result = []
         for r in rows:
             result.append({
-                "id": r[0],
-                "date": r[1],
-                "client": r[2],
-                "product": r[3],
-                "lote": r[4] or "---",
-                "sku": r[5],
-                "quantity": float(r[6]),
-                "guide": r[7] or "S/G",
-                "obs": r[8] or "",
-                "type": r[9]
+                "id": r[0], "date": r[1], "client": r[2], "product": r[3],
+                "lote": r[4] or "---", "sku": r[5], "quantity": float(r[6]),
+                "guide": r[7] or "S/G", "obs": r[8] or "", "type": r[9]
             })
         return result
 
-# ---------- CLIENTES / MEDIDAS / USUARIOS (Sin cambios) ----------
+# ---------- CLIENTES / MEDIDAS / USUARIOS ----------
 def create_client(data):
     with SessionLocal() as s:
         c = Client(name=data["nombre"], document_id=data["cedula_rif"], phone=data["telefono"], email=data["email"], address=data["direccion"], is_active=True)
@@ -230,35 +223,21 @@ def toggle_client_active(cid, active):
         c = s.get(Client, cid); 
         if c: c.is_active = active; s.commit()
 
-# ---------- MEDIDAS PREDEFINIDAS ----------
-def create_measure(data: dict):
-    with SessionLocal() as session:
-        measure = PredefinedMeasure(
-            product_type=data.get("product_type"),
-            name=data.get("name"),
-            largo=data.get("largo"),
-            ancho=data.get("ancho"),
-            espesor=data.get("espesor"),
-            is_active=True
-        )
-        session.add(measure)
-        session.commit()
-        return measure
+def create_measure(data):
+    with SessionLocal() as s:
+        m = PredefinedMeasure(product_type=data["product_type"], name=data["name"], largo=data["largo"], ancho=data["ancho"], espesor=data["espesor"], is_active=True)
+        s.add(m); s.commit(); return m
 
-def get_measures_by_type(p_type: str):
+def get_measures_by_type(ptype):
     with SessionLocal() as session:
-        # Solo traemos las activas (is_active == True)
-        stmt = select(PredefinedMeasure).where(
-            and_(PredefinedMeasure.product_type == p_type, PredefinedMeasure.is_active == True)
-        )
+        stmt = select(PredefinedMeasure).where(and_(PredefinedMeasure.product_type == ptype, PredefinedMeasure.is_active == True))
         return session.execute(stmt).scalars().all()
 
-def delete_measure(measure_id: int):
-    """Realiza un borrado lógico (desactivación)"""
+def delete_measure(mid):
     with SessionLocal() as session:
-        measure = session.get(PredefinedMeasure, measure_id)
-        if measure:
-            measure.is_active = False # Solo desactivamos
+        m = session.get(PredefinedMeasure, mid)
+        if m:
+            m.is_active = False 
             session.commit()
 
 def authenticate_user_plain(u, p):
