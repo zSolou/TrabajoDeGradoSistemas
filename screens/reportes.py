@@ -1,17 +1,13 @@
 from PySide6 import QtCore, QtWidgets, QtGui
-from datetime import date
+from datetime import date, timedelta
+import calendar
 from core import repo, theme
 import sys
 
-# Definimos los factores aquí para calcular los bultos en el reporte
-FACTORES_CONVERSION = {
-    "Tablas": 30,
-    "Tablones": 20,
-    "Paletas": 10,
-    "Machihembrado": 5
-}
+# Factores para conversión
+FACTORES_CONVERSION = { "Tablas": 30, "Tablones": 20, "Paletas": 10, "Machihembrado": 5 }
 
-# --- MATPLOTLIB PARA LAS GRÁFICAS ---
+# --- MATPLOTLIB ---
 try:
     import matplotlib
     matplotlib.use('Qt5Agg')
@@ -22,7 +18,8 @@ except ImportError:
     MATPLOTLIB_AVAILABLE = False
 
 class MplCanvas(FigureCanvas):
-    def __init__(self, parent=None, width=5, height=4, dpi=100):
+    # CAMBIO: Reduje el tamaño por defecto a 3.5 x 3.5 pulgadas
+    def __init__(self, parent=None, width=3.5, height=3.5, dpi=100):
         fig = Figure(figsize=(width, height), dpi=dpi)
         fig.patch.set_facecolor(theme.BG_SIDEBAR)
         self.axes = fig.add_subplot(111)
@@ -55,7 +52,6 @@ class ReportesScreen(QtWidgets.QWidget):
 
     def _setup_ui(self):
         layout = QtWidgets.QVBoxLayout(self)
-        
         t = QtWidgets.QLabel("CENTRO DE REPORTES")
         t.setStyleSheet(f"font-size: 18pt; font-weight: bold; color: {theme.ACCENT_COLOR}; margin-bottom: 10px;")
         t.setAlignment(QtCore.Qt.AlignCenter)
@@ -79,16 +75,25 @@ class ReportesScreen(QtWidgets.QWidget):
 
         layout.addWidget(self.tabs)
 
-    # --- ESTILO UNIFICADO PARA FECHAS Y COMBOS ---
     def _estilizar_input(self, widget):
-        widget.setStyleSheet(f"""
-            background-color: {theme.BG_INPUT}; 
-            color: white; 
-            padding: 5px; 
-            border: 1px solid {theme.BORDER_COLOR}; 
-            border-radius: 4px;
-            min-width: 110px;
-        """)
+        widget.setStyleSheet(f"background-color: {theme.BG_INPUT}; color: white; padding: 5px; border: 1px solid {theme.BORDER_COLOR}; border-radius: 4px; min-width: 100px;")
+
+    # --- AYUDANTE PARA FECHAS RÁPIDAS ---
+    def _set_date_range(self, d1_widget, d2_widget, mode):
+        today = date.today()
+        if mode == "week":
+            # Lunes de esta semana
+            start = today - timedelta(days=today.weekday())
+            end = start + timedelta(days=6)
+        elif mode == "month":
+            # Primer día del mes
+            start = today.replace(day=1)
+            # Último día (día 1 del mes siguiente - 1 día)
+            next_month = today.replace(day=28) + timedelta(days=4)
+            end = next_month.replace(day=1) - timedelta(days=1)
+        
+        d1_widget.setDate(start)
+        d2_widget.setDate(end)
 
     # ---------------- TAB 1: PRODUCCIÓN ----------------
     def _setup_prod_tab(self, parent):
@@ -96,89 +101,75 @@ class ReportesScreen(QtWidgets.QWidget):
         
         filter_box = QtWidgets.QGroupBox("Filtros de Producción")
         filter_box.setStyleSheet(f"color: white; border: 1px solid {theme.BORDER_COLOR}; margin-top: 10px; padding: 10px;")
-        fl = QtWidgets.QHBoxLayout(filter_box)
-        fl.setSpacing(15)
+        fl = QtWidgets.QVBoxLayout(filter_box)
 
-        # Fechas
+        # Fila 1: Fechas y Botones Rápidos
+        row1 = QtWidgets.QHBoxLayout()
         self.d1_prod = QtWidgets.QDateEdit(date.today().replace(day=1)); self.d1_prod.setCalendarPopup(True)
         self.d2_prod = QtWidgets.QDateEdit(date.today()); self.d2_prod.setCalendarPopup(True)
-        self._estilizar_input(self.d1_prod)
-        self._estilizar_input(self.d2_prod)
+        self._estilizar_input(self.d1_prod); self._estilizar_input(self.d2_prod)
         
-        # Selector de Producto (ComboBox)
-        self.cb_prod_filter = QtWidgets.QComboBox()
-        self.cb_prod_filter.addItem("Todos los Productos")
+        btn_week = QtWidgets.QPushButton("Esta Semana"); btn_week.clicked.connect(lambda: self._set_date_range(self.d1_prod, self.d2_prod, "week"))
+        btn_month = QtWidgets.QPushButton("Este Mes"); btn_month.clicked.connect(lambda: self._set_date_range(self.d1_prod, self.d2_prod, "month"))
+        for b in [btn_week, btn_month]: b.setStyleSheet(f"background-color: #444; color: white; padding: 4px; border-radius: 4px;")
+
+        row1.addWidget(QtWidgets.QLabel("Desde:")); row1.addWidget(self.d1_prod)
+        row1.addWidget(QtWidgets.QLabel("Hasta:")); row1.addWidget(self.d2_prod)
+        row1.addWidget(btn_week); row1.addWidget(btn_month); row1.addStretch()
+        
+        # Fila 2: Producto y Buscar
+        row2 = QtWidgets.QHBoxLayout()
+        self.cb_prod_filter = QtWidgets.QComboBox(); self.cb_prod_filter.addItem("Todos los Productos")
         self.cb_prod_filter.addItems(["Tablas", "Machihembrado", "Tablones", "Paletas"])
         self._estilizar_input(self.cb_prod_filter)
 
         btn_search = QtWidgets.QPushButton("🔍 Buscar"); btn_search.clicked.connect(self._search_prod)
-        btn_search.setStyleSheet(f"background-color: {theme.BTN_PRIMARY}; font-weight: bold; padding: 6px 15px; border-radius: 4px;")
-        btn_search.setCursor(QtCore.Qt.PointingHandCursor)
+        btn_search.setStyleSheet(f"background-color: {theme.BTN_PRIMARY}; font-weight: bold; padding: 6px 20px; border-radius: 4px;")
         
-        fl.addWidget(QtWidgets.QLabel("Desde:")); fl.addWidget(self.d1_prod)
-        fl.addWidget(QtWidgets.QLabel("Hasta:")); fl.addWidget(self.d2_prod)
-        fl.addWidget(QtWidgets.QLabel("Producto:")); fl.addWidget(self.cb_prod_filter)
-        fl.addWidget(btn_search)
-        fl.addStretch() # Empuja todo a la izquierda
+        row2.addWidget(QtWidgets.QLabel("Producto:")); row2.addWidget(self.cb_prod_filter)
+        row2.addWidget(btn_search); row2.addStretch()
+
+        fl.addLayout(row1); fl.addLayout(row2)
         l.addWidget(filter_box)
 
         content_split = QtWidgets.QSplitter(QtCore.Qt.Horizontal)
         
-        # Tabla (Columnas cambiadas)
         self.table_prod = QtWidgets.QTableWidget()
         cols = ["Fecha", "Lote", "Producto", "Cant.", "Bultos", "Estado"]
         self.table_prod.setColumnCount(len(cols)); self.table_prod.setHorizontalHeaderLabels(cols)
         self._style_table(self.table_prod)
         content_split.addWidget(self.table_prod)
 
-        # Gráfica
         if MATPLOTLIB_AVAILABLE:
-            self.chart_prod = MplCanvas(self, width=4, height=4, dpi=90)
+            self.chart_prod = MplCanvas(self, width=3.5, height=3.5, dpi=90) # Tamaño reducido
             content_split.addWidget(self.chart_prod)
-        else:
-            content_split.addWidget(QtWidgets.QLabel("Matplotlib no disponible"))
-
-        content_split.setStretchFactor(0, 3); content_split.setStretchFactor(1, 2)
+        
         l.addWidget(content_split)
-
+        
         btn_xls = QtWidgets.QPushButton("📊 Exportar Excel")
         btn_xls.clicked.connect(lambda: exportar_tabla_excel(self, self.table_prod, "produccion"))
-        btn_xls.setStyleSheet("background-color: #217346; color: white; padding: 8px; font-weight: bold; border-radius: 4px;")
+        btn_xls.setStyleSheet("background-color: #217346; color: white; padding: 8px; font-weight: bold;")
         l.addWidget(btn_xls)
 
     def _search_prod(self):
         d1 = self.d1_prod.date().toPython(); d2 = self.d2_prod.date().toPython()
-        
-        # Obtener filtro del Combo
         pname = self.cb_prod_filter.currentText()
         if pname == "Todos los Productos": pname = ""
-        
         try:
             data = repo.report_production_period(d1, d2, pname)
-            self.table_prod.setRowCount(0)
-            stats = {}
-
+            self.table_prod.setRowCount(0); stats = {}
             for r in data:
                 row = self.table_prod.rowCount(); self.table_prod.insertRow(row)
-                
-                # Cálculos
-                tipo = r['producto']
-                piezas = r['piezas_iniciales']
+                tipo = r['producto']; piezas = r['piezas_iniciales']
                 factor = FACTORES_CONVERSION.get(tipo, 1)
-                bultos = piezas / factor if factor else 0
-
                 self.table_prod.setItem(row, 0, QtWidgets.QTableWidgetItem(str(r['fecha'])))
                 self.table_prod.setItem(row, 1, QtWidgets.QTableWidgetItem(str(r['lote'])))
                 self.table_prod.setItem(row, 2, QtWidgets.QTableWidgetItem(str(tipo)))
-                self.table_prod.setItem(row, 3, QtWidgets.QTableWidgetItem(f"{piezas:.0f}")) # Cant.
-                self.table_prod.setItem(row, 4, QtWidgets.QTableWidgetItem(f"{bultos:.0f}")) # Bultos
+                self.table_prod.setItem(row, 3, QtWidgets.QTableWidgetItem(f"{piezas:.0f}"))
+                self.table_prod.setItem(row, 4, QtWidgets.QTableWidgetItem(f"{piezas/factor:.0f}" if factor else "0"))
                 self.table_prod.setItem(row, 5, QtWidgets.QTableWidgetItem(str(r['status'])))
-                
                 stats[tipo] = stats.get(tipo, 0) + piezas
-
-            if MATPLOTLIB_AVAILABLE:
-                self._update_chart(self.chart_prod, stats, "Producción (Piezas)")
-
+            if MATPLOTLIB_AVAILABLE: self._update_chart(self.chart_prod, stats, "Producción (Piezas)")
         except Exception as e: QtWidgets.QMessageBox.critical(self, "Error", str(e))
 
     # ---------------- TAB 2: DESPACHOS ----------------
@@ -187,37 +178,41 @@ class ReportesScreen(QtWidgets.QWidget):
         
         filter_box = QtWidgets.QGroupBox("Filtros de Despacho")
         filter_box.setStyleSheet(f"color: white; border: 1px solid {theme.BORDER_COLOR}; margin-top: 10px; padding: 10px;")
-        fl = QtWidgets.QHBoxLayout(filter_box)
-        fl.setSpacing(15)
+        fl = QtWidgets.QVBoxLayout(filter_box)
 
+        row1 = QtWidgets.QHBoxLayout()
         self.d1_disp = QtWidgets.QDateEdit(date.today().replace(day=1)); self.d1_disp.setCalendarPopup(True)
         self.d2_disp = QtWidgets.QDateEdit(date.today()); self.d2_disp.setCalendarPopup(True)
         self._estilizar_input(self.d1_disp); self._estilizar_input(self.d2_disp)
         
+        btn_week = QtWidgets.QPushButton("Esta Semana"); btn_week.clicked.connect(lambda: self._set_date_range(self.d1_disp, self.d2_disp, "week"))
+        btn_month = QtWidgets.QPushButton("Este Mes"); btn_month.clicked.connect(lambda: self._set_date_range(self.d1_disp, self.d2_disp, "month"))
+        for b in [btn_week, btn_month]: b.setStyleSheet(f"background-color: #444; color: white; padding: 4px; border-radius: 4px;")
+
+        row1.addWidget(QtWidgets.QLabel("Desde:")); row1.addWidget(self.d1_disp)
+        row1.addWidget(QtWidgets.QLabel("Hasta:")); row1.addWidget(self.d2_disp)
+        row1.addWidget(btn_week); row1.addWidget(btn_month); row1.addStretch()
+
+        row2 = QtWidgets.QHBoxLayout()
         self.cb_client = QtWidgets.QComboBox(); self.cb_client.addItem("Todos los Clientes", None)
         for c in repo.list_clients(): self.cb_client.addItem(c.name, c.id)
         self._estilizar_input(self.cb_client)
         
-        # Selector de Producto (ComboBox)
-        self.cb_disp_prod = QtWidgets.QComboBox()
-        self.cb_disp_prod.addItem("Todos los Productos")
+        self.cb_disp_prod = QtWidgets.QComboBox(); self.cb_disp_prod.addItem("Todos los Productos")
         self.cb_disp_prod.addItems(["Tablas", "Machihembrado", "Tablones", "Paletas"])
         self._estilizar_input(self.cb_disp_prod)
 
         btn_search = QtWidgets.QPushButton("🔍 Buscar"); btn_search.clicked.connect(self._search_disp)
-        btn_search.setStyleSheet(f"background-color: {theme.BTN_PRIMARY}; font-weight: bold; padding: 6px 15px; border-radius: 4px;")
-        btn_search.setCursor(QtCore.Qt.PointingHandCursor)
+        btn_search.setStyleSheet(f"background-color: {theme.BTN_PRIMARY}; font-weight: bold; padding: 6px 20px; border-radius: 4px;")
 
-        fl.addWidget(QtWidgets.QLabel("Desde:")); fl.addWidget(self.d1_disp)
-        fl.addWidget(QtWidgets.QLabel("Hasta:")); fl.addWidget(self.d2_disp)
-        fl.addWidget(QtWidgets.QLabel("Cliente:")); fl.addWidget(self.cb_client)
-        fl.addWidget(QtWidgets.QLabel("Prod:")); fl.addWidget(self.cb_disp_prod)
-        fl.addWidget(btn_search)
-        fl.addStretch()
+        row2.addWidget(QtWidgets.QLabel("Cliente:")); row2.addWidget(self.cb_client)
+        row2.addWidget(QtWidgets.QLabel("Prod:")); row2.addWidget(self.cb_disp_prod)
+        row2.addWidget(btn_search); row2.addStretch()
+
+        fl.addLayout(row1); fl.addLayout(row2)
         l.addWidget(filter_box)
 
         content_split = QtWidgets.QSplitter(QtCore.Qt.Horizontal)
-        
         self.table_disp = QtWidgets.QTableWidget()
         cols = ["Fecha", "Guía", "Cliente", "Producto", "Lote", "Cant.", "Obs"]
         self.table_disp.setColumnCount(len(cols)); self.table_disp.setHorizontalHeaderLabels(cols)
@@ -225,29 +220,24 @@ class ReportesScreen(QtWidgets.QWidget):
         content_split.addWidget(self.table_disp)
 
         if MATPLOTLIB_AVAILABLE:
-            self.chart_disp = MplCanvas(self, width=4, height=4, dpi=90)
+            self.chart_disp = MplCanvas(self, width=3.5, height=3.5, dpi=90) # Tamaño reducido
             content_split.addWidget(self.chart_disp)
         
-        content_split.setStretchFactor(0, 3); content_split.setStretchFactor(1, 2)
         l.addWidget(content_split)
-
+        
         btn_xls = QtWidgets.QPushButton("📊 Exportar Excel")
         btn_xls.clicked.connect(lambda: exportar_tabla_excel(self, self.table_disp, "despachos"))
-        btn_xls.setStyleSheet("background-color: #217346; color: white; padding: 8px; font-weight: bold; border-radius: 4px;")
+        btn_xls.setStyleSheet("background-color: #217346; color: white; padding: 8px; font-weight: bold;")
         l.addWidget(btn_xls)
 
     def _search_disp(self):
         d1 = self.d1_disp.date().toPython(); d2 = self.d2_disp.date().toPython()
         cid = self.cb_client.currentData()
-        
         pname = self.cb_disp_prod.currentText()
         if pname == "Todos los Productos": pname = ""
-        
         try:
             data = repo.report_dispatches_detailed(d1, d2, cid, pname)
-            self.table_disp.setRowCount(0)
-            stats = {} 
-
+            self.table_disp.setRowCount(0); stats = {}
             for r in data:
                 row = self.table_disp.rowCount(); self.table_disp.insertRow(row)
                 self.table_disp.setItem(row, 0, QtWidgets.QTableWidgetItem(str(r['fecha'])))
@@ -257,13 +247,8 @@ class ReportesScreen(QtWidgets.QWidget):
                 self.table_disp.setItem(row, 4, QtWidgets.QTableWidgetItem(str(r['lote'])))
                 self.table_disp.setItem(row, 5, QtWidgets.QTableWidgetItem(f"{r['cantidad']:.0f}"))
                 self.table_disp.setItem(row, 6, QtWidgets.QTableWidgetItem(str(r['obs'])))
-                
-                prod = r['producto']
-                stats[prod] = stats.get(prod, 0) + r['cantidad']
-
-            if MATPLOTLIB_AVAILABLE:
-                self._update_chart(self.chart_disp, stats, "Despachos (Piezas)")
-
+                prod = r['producto']; stats[prod] = stats.get(prod, 0) + r['cantidad']
+            if MATPLOTLIB_AVAILABLE: self._update_chart(self.chart_disp, stats, "Despachos (Piezas)")
         except Exception as e: QtWidgets.QMessageBox.critical(self, "Error", str(e))
 
     # ---------------- TAB 3: LOTES ----------------
@@ -276,12 +261,17 @@ class ReportesScreen(QtWidgets.QWidget):
         self.s_l2 = QtWidgets.QSpinBox(); self.s_l2.setRange(0, 999999); self.s_l2.setPrefix("Lote ")
         self._estilizar_input(self.s_l1); self._estilizar_input(self.s_l2)
 
+        # CHECKBOX PARA INCLUIR AGOTADOS
+        self.chk_agotados = QtWidgets.QCheckBox("Incluir Agotados/Bajas")
+        self.chk_agotados.setStyleSheet("color: white; font-weight: bold;")
+
         btn = QtWidgets.QPushButton("🔍 Buscar"); btn.clicked.connect(self._search_lotes)
         btn.setStyleSheet(f"background-color: {theme.BTN_PRIMARY}; font-weight: bold; padding: 6px 15px; border-radius: 4px; color: white;")
         
         h.addWidget(QtWidgets.QLabel("Desde:")); h.addWidget(self.s_l1)
-        h.addWidget(QtWidgets.QLabel("Hasta:")); h.addWidget(self.s_l2); h.addWidget(btn)
-        h.addStretch()
+        h.addWidget(QtWidgets.QLabel("Hasta:")); h.addWidget(self.s_l2)
+        h.addWidget(self.chk_agotados) # Añadido
+        h.addWidget(btn); h.addStretch()
         l.addLayout(h)
 
         self.table_lote = QtWidgets.QTableWidget()
@@ -292,9 +282,10 @@ class ReportesScreen(QtWidgets.QWidget):
 
     def _search_lotes(self):
         l1 = self.s_l1.value(); l2 = self.s_l2.value()
+        incluir = self.chk_agotados.isChecked() # Leer checkbox
         if l1 > l2: QtWidgets.QMessageBox.warning(self, "Error", "Rango inválido."); return
         try:
-            data = repo.report_by_lot_range(l1, l2)
+            data = repo.report_by_lot_range(l1, l2, incluir_bajas=incluir) # Pasar al repo
             self.table_lote.setRowCount(0)
             for r in data:
                 row = self.table_lote.rowCount(); self.table_lote.insertRow(row)
@@ -305,35 +296,17 @@ class ReportesScreen(QtWidgets.QWidget):
                 self.table_lote.setItem(row, 4, QtWidgets.QTableWidgetItem(str(r['estado'])))
         except Exception as e: QtWidgets.QMessageBox.critical(self, "Error", str(e))
 
-    # --- HELPERS ---
     def _style_table(self, t):
-        t.setStyleSheet(f"""
-            QTableWidget {{ background-color: {theme.BG_SIDEBAR}; color: {theme.TEXT_PRIMARY}; gridline-color: {theme.BORDER_COLOR}; border: 1px solid {theme.BORDER_COLOR}; }} 
-            QHeaderView::section {{ background-color: #1b1b26; color: {theme.TEXT_SECONDARY}; padding: 8px; font-weight: bold; border: none; }}
-            QTableWidget::item {{ padding: 5px; }}
-        """)
+        t.setStyleSheet(f"QTableWidget {{ background-color: {theme.BG_SIDEBAR}; color: {theme.TEXT_PRIMARY}; gridline-color: {theme.BORDER_COLOR}; }} QHeaderView::section {{ background-color: #1b1b26; color: {theme.TEXT_SECONDARY}; padding: 8px; font-weight: bold; }} QTableWidget::item {{ padding: 5px; }}")
         t.horizontalHeader().setSectionResizeMode(QtWidgets.QHeaderView.Stretch)
-        t.verticalHeader().setVisible(False)
-        t.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
+        t.verticalHeader().setVisible(False); t.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
 
     def _update_chart(self, canvas, data_dict, title):
         canvas.axes.clear()
-        if not data_dict:
-            canvas.axes.text(0.5, 0.5, "Sin datos", ha='center', va='center', color='white')
-            canvas.draw(); return
-        
-        labels = list(data_dict.keys())
-        sizes = list(data_dict.values())
+        if not data_dict: canvas.axes.text(0.5, 0.5, "Sin datos", ha='center', va='center', color='white'); canvas.draw(); return
+        labels = list(data_dict.keys()); sizes = list(data_dict.values())
         colors = ['#00f2c3', '#fd5d93', '#ffc107', '#1d8cf8', '#e14eca']
-        
-        wedges, texts, autotexts = canvas.axes.pie(
-            sizes, labels=labels, autopct='%1.1f%%',
-            startangle=90, colors=colors[:len(labels)],
-            textprops=dict(color="white")
-        )
-        
-        canvas.axes.set_title(title, color="white", fontsize=12, pad=10)
-        for autotext in autotexts:
-            autotext.set_color('black'); autotext.set_weight('bold')
-            
+        wedges, texts, autotexts = canvas.axes.pie(sizes, labels=labels, autopct='%1.1f%%', startangle=90, colors=colors[:len(labels)], textprops=dict(color="white"))
+        canvas.axes.set_title(title, color="white", fontsize=10, pad=10)
+        for autotext in autotexts: autotext.set_color('black'); autotext.set_weight('bold')
         canvas.draw()

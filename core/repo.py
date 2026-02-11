@@ -400,3 +400,60 @@ def report_by_lot_range(start_lote: int, end_lote: int):
             except ValueError: continue
         data.sort(key=lambda x: int(x["lote"]))
         return data
+    
+    # ---------- REPORTES AVANZADOS ----------
+
+def report_production_period(start_date, end_date, product_name=None):
+    with SessionLocal() as s:
+        stmt = (
+            select(Inventory, Product.name)
+            .join(Product, Inventory.product_id == Product.id)
+            .where(and_(Inventory.prod_date >= start_date, Inventory.prod_date <= end_date))
+        )
+        if product_name: stmt = stmt.where(Product.name.ilike(f"%{product_name}%"))
+        stmt = stmt.order_by(Inventory.prod_date)
+        results = s.execute(stmt).all()
+        data = []
+        for inv, pname in results:
+            data.append({
+                "fecha": inv.prod_date, "lote": inv.nro_lote, "producto": pname,
+                "cantidad": float(inv.quantity), "piezas_iniciales": inv.piezas or 0, "status": inv.status
+            })
+        return data
+
+def report_dispatches_detailed(start_date, end_date, client_id=None, product_name=None):
+    with SessionLocal() as s:
+        stmt = (
+            select(Dispatch.date, Dispatch.transport_guide, Client.name, Product.name, Inventory.nro_lote, Dispatch.quantity, Dispatch.obs)
+            .join(Inventory, Dispatch.inventory_id == Inventory.id)
+            .join(Product, Inventory.product_id == Product.id)
+            .join(Client, Dispatch.client_id == Client.id)
+            .where(and_(Dispatch.date >= start_date, Dispatch.date <= end_date))
+        )
+        if client_id: stmt = stmt.where(Dispatch.client_id == client_id)
+        if product_name: stmt = stmt.where(Product.name.ilike(f"%{product_name}%"))
+        stmt = stmt.order_by(Dispatch.date.desc())
+        results = s.execute(stmt).all()
+        return [{"fecha": r[0], "guia": r[1], "cliente": r[2], "producto": r[3], "lote": r[4], "cantidad": float(r[5]), "obs": r[6]} for r in results]
+
+# --- CAMBIO: AHORA ACEPTA UN FILTRO PARA BAJAS ---
+def report_by_lot_range(start_lote: int, end_lote: int, incluir_bajas: bool = False):
+    with SessionLocal() as s:
+        stmt = select(Inventory, Product.name).join(Product, Inventory.product_id == Product.id)
+        results = s.execute(stmt).all()
+        data = []
+        for inv, pname in results:
+            try:
+                lote_num = int(inv.nro_lote)
+                if start_lote <= lote_num <= end_lote:
+                    # FILTRO DE BAJAS
+                    if not incluir_bajas and (inv.quantity <= 0 or inv.status == "BAJA"):
+                        continue
+                    
+                    data.append({
+                        "lote": inv.nro_lote, "producto": pname, "fecha_prod": inv.prod_date,
+                        "stock_actual": float(inv.quantity), "estado": inv.status
+                    })
+            except ValueError: continue
+        data.sort(key=lambda x: int(x["lote"]))
+        return data
