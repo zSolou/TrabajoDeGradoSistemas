@@ -1,8 +1,10 @@
 from decimal import Decimal
-from sqlalchemy import select, update, delete, and_
+from sqlalchemy import select, update, delete, and_, or_
 from sqlalchemy.exc import IntegrityError
-from .db import SessionLocal
+from .db import SessionLocal, create_tables
 from .models import Client, PredefinedMeasure, User, Product, Inventory, Movement, Dispatch
+import psycopg2
+import psycopg2.extras
 from datetime import datetime, date
 
 # ---------- HERRAMIENTAS ----------
@@ -26,31 +28,23 @@ def create_product_with_inventory(data: dict):
             if not sku or not name: raise ValueError("SKU y Nombre obligatorios.")
             if not nro_lote: raise ValueError("El Número de Lote es obligatorio.")
 
-            # --- VALIDACIÓN INTELIGENTE (ELIMINA EL ERROR DE DOBLE CLIC) ---
+            # --- VALIDACIÓN INTELIGENTE ---
             existing = session.execute(select(Inventory).where(Inventory.nro_lote == nro_lote)).scalars().first()
             
             if existing:
-                # Si ya existe, verificamos si es EXACTAMENTE el mismo intento de guardado
-                # (Mismo SKU y misma cantidad). Si es así, asumimos que es un "doble clic" y no hacemos nada.
                 existing_qty = float(existing.quantity)
                 new_qty = float(data.get("quantity") or 0)
-                
-                # Tolerancia pequeña para float
                 if existing.sku == sku and abs(existing_qty - new_qty) < 0.01:
-                    return {"inventory_id": existing.id, "status": "ignored_duplicate"} # Éxito silencioso
-                
-                # Si los datos son diferentes, entonces SÍ es un error de duplicado real
+                    return {"inventory_id": existing.id, "status": "ignored_duplicate"}
                 raise ValueError(f"El Lote '{nro_lote}' ya existe con otros datos.")
-            # ---------------------------------------------------------------
+            # ------------------------------
 
-            # 1. Buscar o Crear Producto
             prod = session.execute(select(Product).where(Product.sku == sku)).scalars().first()
             if not prod:
                 prod = Product(sku=sku, name=name, unit=data.get("unit"), quality=data.get("quality"))
                 session.add(prod)
                 session.flush()
 
-            # 2. Guardar Inventario
             inv = Inventory(
                 product_id=prod.id,
                 sku=sku,
@@ -71,7 +65,6 @@ def create_product_with_inventory(data: dict):
             session.add(inv)
             session.flush()
             
-            # 3. Movimiento
             if inv.quantity != 0:
                 mv = Movement(
                     inventory_id=inv.id, product_id=prod.id, change_quantity=inv.quantity,
@@ -84,13 +77,13 @@ def create_product_with_inventory(data: dict):
 
         except IntegrityError:
             session.rollback()
-            # Si el candado de la BD salta, también asumimos doble clic y lo ignoramos
             return {"status": "ignored_duplicate"}
         except Exception:
             session.rollback()
             raise
 
-def list_inventory_rows():
+# --- CAMBIO 1: FILTRO DE VISIBILIDAD ---
+def list_inventory_rows(mostrar_agotados=False):
     with SessionLocal() as session:
         stmt = (
             select(
@@ -103,8 +96,14 @@ def list_inventory_rows():
                 Product.name,
                 Inventory.drying, Inventory.planing, Inventory.impregnated
             ).join(Product, Product.id == Inventory.product_id)
-            .order_by(Inventory.created_at.desc())
         )
+
+        # Si NO queremos ver agotados, filtramos solo los que tienen cantidad > 0
+        if not mostrar_agotados:
+            stmt = stmt.where(Inventory.quantity > 0)
+        
+        stmt = stmt.order_by(Inventory.created_at.desc())
+        
         rows = session.execute(stmt).all()
         result = []
         for r in rows:
@@ -119,7 +118,52 @@ def list_inventory_rows():
             })
         return result
 
-# ... (Mantén el resto de funciones create_dispatch, get_available, etc. igual que antes) ...
+# --- CAMBIO 2: ELIMINACIÓN LÓGICA (DAR DE BAJA) ---
+def delete_inventory(inventory_id: int):
+    with SessionLocal() as session:
+        inv = session.get(Inventory, inventory_id)
+        if inv and inv.quantity > 0:
+            # En lugar de borrar, sacamos todo el stock y cambiamos estado
+            qty_to_remove = inv.quantity
+            
+            # Registrar movimiento de salida por baja
+            mv = Movement(
+                inventory_id=inv.id,
+                product_id=inv.product_id,
+                change_quantity=-qty_to_remove,
+                movement_type="OUT",
+                reference="BAJA MANUAL",
+                notes="Eliminación lógica desde Inventario"
+            )
+            session.add(mv)
+
+            # Actualizar inventario a CERO y estado BAJA
+            inv.quantity = 0
+            inv.status = "BAJA" # O "AGOTADO"
+            
+            session.commit()
+            
+        elif inv and inv.quantity == 0:
+            # Si ya está en 0, solo aseguramos el estado
+            inv.status = "BAJA"
+            session.commit()
+
+# ... (El resto del archivo create_dispatch, update_inventory, etc. sigue igual) ...
+def update_inventory(data: dict):
+    with SessionLocal() as session:
+        inv = session.get(Inventory, data["id"])
+        if not inv: raise ValueError("No encontrado")
+        inv.nro_lote = data.get("nro_lote")
+        inv.quantity = data.get("quantity")
+        inv.largo = data.get("largo")
+        inv.ancho = data.get("ancho")
+        inv.espesor = data.get("espesor")
+        inv.piezas = data.get("piezas")
+        inv.prod_date = _parse_date(data.get("prod_date"))
+        inv.quality = data.get("quality")
+        inv.obs = data.get("obs")
+        session.commit()
+
 def get_available_inventory():
     with SessionLocal() as session:
         stmt = (select(Inventory, Product.name).join(Product, Inventory.product_id == Product.id).where(and_(Inventory.quantity > 0, Inventory.status == 'DISPONIBLE')).order_by(Inventory.prod_date))
@@ -168,9 +212,5 @@ def delete_measure(mid):
 def authenticate_user_plain(u, p):
     with SessionLocal() as s: us=s.execute(select(User).where(User.username==u)).scalars().first(); 
     return {"id":us.id,"username":us.username,"role":us.role} if us and us.active and us.password_hash==p else None
-def update_inventory(data):
-    with SessionLocal() as s: i=s.get(Inventory, data["id"]); 
-    if i: i.nro_lote=data.get("nro_lote"); i.quantity=data.get("quantity"); i.largo=data.get("largo"); i.ancho=data.get("ancho"); i.espesor=data.get("espesor"); i.piezas=data.get("piezas"); i.prod_date=_parse_date(data.get("prod_date")); i.quality=data.get("quality"); i.obs=data.get("obs"); s.commit()
-def delete_inventory(iid):
-    with SessionLocal() as s: i=s.get(Inventory, iid); 
-    if i: s.delete(i); s.commit()
+def delete_inventory_logical(iid): # Alias
+    delete_inventory(iid)
