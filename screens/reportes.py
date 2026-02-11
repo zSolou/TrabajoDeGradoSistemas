@@ -145,8 +145,7 @@ class ReportesScreen(QtWidgets.QWidget):
 
         content_split = QtWidgets.QSplitter(QtCore.Qt.Horizontal)
         self.table_prod = QtWidgets.QTableWidget()
-        # --- AÑADIDO SKU ---
-        cols = ["Fecha", "Lote", "SKU", "Producto", "Calidad", "Cant.", "Bultos", "Estado"]
+        cols = ["Fecha", "Lote", "SKU", "Producto", "Calidad", "Cant. (Pzas)", "Bultos", "Estado"]
         self.table_prod.setColumnCount(len(cols)); self.table_prod.setHorizontalHeaderLabels(cols)
         self._style_table(self.table_prod)
         content_split.addWidget(self.table_prod)
@@ -178,11 +177,11 @@ class ReportesScreen(QtWidgets.QWidget):
                 
                 self.table_prod.setItem(row, 0, QtWidgets.QTableWidgetItem(str(r['fecha'])))
                 self.table_prod.setItem(row, 1, QtWidgets.QTableWidgetItem(str(r['lote'])))
-                self.table_prod.setItem(row, 2, QtWidgets.QTableWidgetItem(str(r['sku']))) # SKU
+                self.table_prod.setItem(row, 2, QtWidgets.QTableWidgetItem(str(r['sku'])))
                 self.table_prod.setItem(row, 3, QtWidgets.QTableWidgetItem(str(tipo)))
                 self.table_prod.setItem(row, 4, QtWidgets.QTableWidgetItem(str(r.get('quality', '-'))))
                 self.table_prod.setItem(row, 5, QtWidgets.QTableWidgetItem(f"{piezas:.0f}"))
-                self.table_prod.setItem(row, 6, QtWidgets.QTableWidgetItem(f"{piezas/factor:.0f}" if factor else "0"))
+                self.table_prod.setItem(row, 6, QtWidgets.QTableWidgetItem(f"{piezas/factor:.1f}" if factor else "0"))
                 self.table_prod.setItem(row, 7, QtWidgets.QTableWidgetItem(str(r['status'])))
                 
                 stats[tipo] = stats.get(tipo, 0) + piezas
@@ -241,8 +240,8 @@ class ReportesScreen(QtWidgets.QWidget):
 
         content_split = QtWidgets.QSplitter(QtCore.Qt.Horizontal)
         self.table_disp = QtWidgets.QTableWidget()
-        # --- AÑADIDO SKU ---
-        cols = ["Fecha", "Guía", "Cliente", "Producto", "Lote", "SKU", "Cant.", "Obs"]
+        # --- NUEVA COLUMNA: BULTOS ---
+        cols = ["Fecha", "Guía", "Cliente", "Producto", "Lote", "SKU", "Cant. (Pzas)", "Bultos", "Obs"]
         self.table_disp.setColumnCount(len(cols)); self.table_disp.setHorizontalHeaderLabels(cols)
         self._style_table(self.table_disp)
         content_split.addWidget(self.table_disp)
@@ -270,15 +269,23 @@ class ReportesScreen(QtWidgets.QWidget):
             self.table_disp.setRowCount(0); stats = {}
             for r in data:
                 row = self.table_disp.rowCount(); self.table_disp.insertRow(row)
+                
+                tipo = str(r['producto'])
+                cant_pzas = r['cantidad']
+                factor = FACTORES_CONVERSION.get(tipo, 1)
+                bultos = cant_pzas / factor if factor else 0
+
                 self.table_disp.setItem(row, 0, QtWidgets.QTableWidgetItem(str(r['fecha'])))
                 self.table_disp.setItem(row, 1, QtWidgets.QTableWidgetItem(str(r['guia'])))
                 self.table_disp.setItem(row, 2, QtWidgets.QTableWidgetItem(str(r['cliente'])))
-                self.table_disp.setItem(row, 3, QtWidgets.QTableWidgetItem(str(r['producto'])))
+                self.table_disp.setItem(row, 3, QtWidgets.QTableWidgetItem(tipo))
                 self.table_disp.setItem(row, 4, QtWidgets.QTableWidgetItem(str(r['lote'])))
-                self.table_disp.setItem(row, 5, QtWidgets.QTableWidgetItem(str(r['sku']))) # SKU
-                self.table_disp.setItem(row, 6, QtWidgets.QTableWidgetItem(f"{r['cantidad']:.0f}"))
-                self.table_disp.setItem(row, 7, QtWidgets.QTableWidgetItem(str(r['obs'])))
-                prod = r['producto']; stats[prod] = stats.get(prod, 0) + r['cantidad']
+                self.table_disp.setItem(row, 5, QtWidgets.QTableWidgetItem(str(r['sku'])))
+                self.table_disp.setItem(row, 6, QtWidgets.QTableWidgetItem(f"{cant_pzas:.0f}"))
+                self.table_disp.setItem(row, 7, QtWidgets.QTableWidgetItem(f"{bultos:.1f}")) # BULTOS
+                self.table_disp.setItem(row, 8, QtWidgets.QTableWidgetItem(str(r['obs'])))
+                
+                stats[tipo] = stats.get(tipo, 0) + cant_pzas
             if MATPLOTLIB_AVAILABLE: self._update_chart(self.chart_disp, stats, "Despachos (Piezas)")
         except Exception as e: QtWidgets.QMessageBox.critical(self, "Error", str(e))
 
@@ -311,8 +318,8 @@ class ReportesScreen(QtWidgets.QWidget):
         l.addLayout(h)
 
         self.table_lote = QtWidgets.QTableWidget()
-        # --- AÑADIDO SKU ---
-        cols = ["Lote", "SKU", "Producto", "F. Prod", "Stock Actual", "Estado"]
+        # --- NUEVA COLUMNA: BULTOS ---
+        cols = ["Lote", "SKU", "Producto", "F. Prod", "Stock Actual (Pzas)", "Bultos", "Estado"]
         self.table_lote.setColumnCount(len(cols)); self.table_lote.setHorizontalHeaderLabels(cols)
         self._style_table(self.table_lote)
         l.addWidget(self.table_lote)
@@ -329,12 +336,19 @@ class ReportesScreen(QtWidgets.QWidget):
             self.table_lote.setRowCount(0)
             for r in data:
                 row = self.table_lote.rowCount(); self.table_lote.insertRow(row)
+                
+                tipo = str(r['producto'])
+                stock = r['stock_actual']
+                factor = FACTORES_CONVERSION.get(tipo, 1)
+                bultos = stock / factor if factor else 0
+
                 self.table_lote.setItem(row, 0, QtWidgets.QTableWidgetItem(str(r['lote'])))
-                self.table_lote.setItem(row, 1, QtWidgets.QTableWidgetItem(str(r['sku']))) # SKU
-                self.table_lote.setItem(row, 2, QtWidgets.QTableWidgetItem(str(r['producto'])))
+                self.table_lote.setItem(row, 1, QtWidgets.QTableWidgetItem(str(r['sku'])))
+                self.table_lote.setItem(row, 2, QtWidgets.QTableWidgetItem(tipo))
                 self.table_lote.setItem(row, 3, QtWidgets.QTableWidgetItem(str(r['fecha_prod'])))
-                self.table_lote.setItem(row, 4, QtWidgets.QTableWidgetItem(f"{r['stock_actual']:.0f}"))
-                self.table_lote.setItem(row, 5, QtWidgets.QTableWidgetItem(str(r['estado'])))
+                self.table_lote.setItem(row, 4, QtWidgets.QTableWidgetItem(f"{stock:.0f}"))
+                self.table_lote.setItem(row, 5, QtWidgets.QTableWidgetItem(f"{bultos:.1f}")) # BULTOS
+                self.table_lote.setItem(row, 6, QtWidgets.QTableWidgetItem(str(r['estado'])))
         except Exception as e: QtWidgets.QMessageBox.critical(self, "Error", str(e))
 
     def _style_table(self, t):
