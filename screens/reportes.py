@@ -76,6 +76,7 @@ class ReportesScreen(QtWidgets.QWidget):
     def _estilizar_input(self, widget):
         widget.setStyleSheet(f"background-color: {theme.BG_INPUT}; color: white; padding: 5px; border: 1px solid {theme.BORDER_COLOR}; border-radius: 4px; min-width: 100px;")
 
+    # --- LÓGICA DE RANGOS DE FECHA ---
     def _set_date_range(self, d1_widget, d2_widget, mode):
         today = date.today()
         if mode == "week":
@@ -85,6 +86,11 @@ class ReportesScreen(QtWidgets.QWidget):
             start = today.replace(day=1)
             next_month = today.replace(day=28) + timedelta(days=4)
             end = next_month.replace(day=1) - timedelta(days=1)
+        elif mode == "all":
+            # Rango amplio: Desde el año 2000 hasta el 2030
+            start = date(2020, 1, 1)
+            end = date(2034, 12, 31)
+        
         d1_widget.setDate(start); d2_widget.setDate(end)
 
     # ---------------- TAB 1: PRODUCCIÓN ----------------
@@ -101,13 +107,25 @@ class ReportesScreen(QtWidgets.QWidget):
         self.d2_prod = QtWidgets.QDateEdit(date.today()); self.d2_prod.setCalendarPopup(True)
         self._estilizar_input(self.d1_prod); self._estilizar_input(self.d2_prod)
         
-        btn_week = QtWidgets.QPushButton("Esta Semana"); btn_week.clicked.connect(lambda: self._set_date_range(self.d1_prod, self.d2_prod, "week"))
-        btn_month = QtWidgets.QPushButton("Este Mes"); btn_month.clicked.connect(lambda: self._set_date_range(self.d1_prod, self.d2_prod, "month"))
-        for b in [btn_week, btn_month]: b.setStyleSheet(f"background-color: #444; color: white; padding: 4px; border-radius: 4px;")
+        btn_week = QtWidgets.QPushButton("Esta Semana")
+        btn_week.clicked.connect(lambda: self._set_date_range(self.d1_prod, self.d2_prod, "week"))
+        
+        btn_month = QtWidgets.QPushButton("Este Mes")
+        btn_month.clicked.connect(lambda: self._set_date_range(self.d1_prod, self.d2_prod, "month"))
+        
+        # --- NUEVO BOTÓN: TODOS ---
+        btn_all = QtWidgets.QPushButton("Todos")
+        btn_all.clicked.connect(lambda: self._set_date_range(self.d1_prod, self.d2_prod, "all"))
+        
+        # Estilo para botones pequeños
+        for b in [btn_week, btn_month, btn_all]: 
+            b.setStyleSheet(f"background-color: #444; color: white; padding: 4px 10px; border-radius: 4px;")
+            b.setCursor(QtCore.Qt.PointingHandCursor)
 
         row1.addWidget(QtWidgets.QLabel("Desde:")); row1.addWidget(self.d1_prod)
         row1.addWidget(QtWidgets.QLabel("Hasta:")); row1.addWidget(self.d2_prod)
-        row1.addWidget(btn_week); row1.addWidget(btn_month); row1.addStretch()
+        row1.addWidget(btn_week); row1.addWidget(btn_month); row1.addWidget(btn_all) # Agregado
+        row1.addStretch()
         
         # Fila 2: Producto, Calidad, Buscar
         row2 = QtWidgets.QHBoxLayout()
@@ -115,11 +133,9 @@ class ReportesScreen(QtWidgets.QWidget):
         self.cb_prod_filter.addItems(["Tablas", "Machihembrado", "Tablones", "Paletas"])
         self._estilizar_input(self.cb_prod_filter)
 
-        # --- NUEVO: FILTRO CALIDAD ---
         self.cb_qual_filter = QtWidgets.QComboBox()
         self.cb_qual_filter.addItems(["Todas", "Tipo 1", "Tipo 2", "Tipo 3", "Tipo 4"])
         self._estilizar_input(self.cb_qual_filter)
-        # -----------------------------
 
         btn_search = QtWidgets.QPushButton("🔍 Buscar"); btn_search.clicked.connect(self._search_prod)
         btn_search.setStyleSheet(f"background-color: {theme.BTN_PRIMARY}; font-weight: bold; padding: 6px 20px; border-radius: 4px;")
@@ -166,7 +182,7 @@ class ReportesScreen(QtWidgets.QWidget):
                 self.table_prod.setItem(row, 0, QtWidgets.QTableWidgetItem(str(r['fecha'])))
                 self.table_prod.setItem(row, 1, QtWidgets.QTableWidgetItem(str(r['lote'])))
                 self.table_prod.setItem(row, 2, QtWidgets.QTableWidgetItem(str(tipo)))
-                self.table_prod.setItem(row, 3, QtWidgets.QTableWidgetItem(str(r.get('quality', '-')))) # Nueva columna
+                self.table_prod.setItem(row, 3, QtWidgets.QTableWidgetItem(str(r.get('quality', '-'))))
                 self.table_prod.setItem(row, 4, QtWidgets.QTableWidgetItem(f"{piezas:.0f}"))
                 self.table_prod.setItem(row, 5, QtWidgets.QTableWidgetItem(f"{piezas/factor:.0f}" if factor else "0"))
                 self.table_prod.setItem(row, 6, QtWidgets.QTableWidgetItem(str(r['status'])))
@@ -188,13 +204,24 @@ class ReportesScreen(QtWidgets.QWidget):
         self.d2_disp = QtWidgets.QDateEdit(date.today()); self.d2_disp.setCalendarPopup(True)
         self._estilizar_input(self.d1_disp); self._estilizar_input(self.d2_disp)
         
-        btn_week = QtWidgets.QPushButton("Esta Semana"); btn_week.clicked.connect(lambda: self._set_date_range(self.d1_disp, self.d2_disp, "week"))
-        btn_month = QtWidgets.QPushButton("Este Mes"); btn_month.clicked.connect(lambda: self._set_date_range(self.d1_disp, self.d2_disp, "month"))
-        for b in [btn_week, btn_month]: b.setStyleSheet(f"background-color: #444; color: white; padding: 4px; border-radius: 4px;")
+        btn_week = QtWidgets.QPushButton("Esta Semana")
+        btn_week.clicked.connect(lambda: self._set_date_range(self.d1_disp, self.d2_disp, "week"))
+        
+        btn_month = QtWidgets.QPushButton("Este Mes")
+        btn_month.clicked.connect(lambda: self._set_date_range(self.d1_disp, self.d2_disp, "month"))
+        
+        # --- NUEVO BOTÓN: TODOS ---
+        btn_all = QtWidgets.QPushButton("Todos")
+        btn_all.clicked.connect(lambda: self._set_date_range(self.d1_disp, self.d2_disp, "all"))
+
+        for b in [btn_week, btn_month, btn_all]: 
+            b.setStyleSheet(f"background-color: #444; color: white; padding: 4px 10px; border-radius: 4px;")
+            b.setCursor(QtCore.Qt.PointingHandCursor)
 
         row1.addWidget(QtWidgets.QLabel("Desde:")); row1.addWidget(self.d1_disp)
         row1.addWidget(QtWidgets.QLabel("Hasta:")); row1.addWidget(self.d2_disp)
-        row1.addWidget(btn_week); row1.addWidget(btn_month); row1.addStretch()
+        row1.addWidget(btn_week); row1.addWidget(btn_month); row1.addWidget(btn_all) # Agregado
+        row1.addStretch()
 
         row2 = QtWidgets.QHBoxLayout()
         self.cb_client = QtWidgets.QComboBox(); self.cb_client.addItem("Todos los Clientes", None)
@@ -205,11 +232,9 @@ class ReportesScreen(QtWidgets.QWidget):
         self.cb_disp_prod.addItems(["Tablas", "Machihembrado", "Tablones", "Paletas"])
         self._estilizar_input(self.cb_disp_prod)
 
-        # --- NUEVO: FILTRO GUÍA ---
         self.txt_guide = QtWidgets.QLineEdit()
         self.txt_guide.setPlaceholderText("Nro. Guía")
         self._estilizar_input(self.txt_guide)
-        # --------------------------
 
         btn_search = QtWidgets.QPushButton("🔍 Buscar"); btn_search.clicked.connect(self._search_disp)
         btn_search.setStyleSheet(f"background-color: {theme.BTN_PRIMARY}; font-weight: bold; padding: 6px 15px; border-radius: 4px;")
@@ -273,12 +298,10 @@ class ReportesScreen(QtWidgets.QWidget):
         self.s_l2 = QtWidgets.QSpinBox(); self.s_l2.setRange(0, 999999); self.s_l2.setPrefix("Lote ")
         self._estilizar_input(self.s_l1); self._estilizar_input(self.s_l2)
 
-        # --- NUEVO: FILTRO PRODUCTO EN LOTES ---
         self.cb_lote_prod = QtWidgets.QComboBox()
         self.cb_lote_prod.addItem("Todos los Productos")
         self.cb_lote_prod.addItems(["Tablas", "Machihembrado", "Tablones", "Paletas"])
         self._estilizar_input(self.cb_lote_prod)
-        # ---------------------------------------
 
         self.chk_agotados = QtWidgets.QCheckBox("Incluir Agotados/Bajas")
         self.chk_agotados.setStyleSheet("color: white; font-weight: bold;")
