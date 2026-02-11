@@ -76,7 +76,6 @@ class ReportesScreen(QtWidgets.QWidget):
     def _estilizar_input(self, widget):
         widget.setStyleSheet(f"background-color: {theme.BG_INPUT}; color: white; padding: 5px; border: 1px solid {theme.BORDER_COLOR}; border-radius: 4px; min-width: 100px;")
 
-    # --- LÓGICA DE RANGOS DE FECHA ---
     def _set_date_range(self, d1_widget, d2_widget, mode):
         today = date.today()
         if mode == "week":
@@ -87,9 +86,8 @@ class ReportesScreen(QtWidgets.QWidget):
             next_month = today.replace(day=28) + timedelta(days=4)
             end = next_month.replace(day=1) - timedelta(days=1)
         elif mode == "all":
-            # Rango amplio: Desde el año 2000 hasta el 2030
-            start = date(2020, 1, 1)
-            end = date(2034, 12, 31)
+            start = date(2000, 1, 1)
+            end = date(2030, 12, 31)
         
         d1_widget.setDate(start); d2_widget.setDate(end)
 
@@ -101,7 +99,7 @@ class ReportesScreen(QtWidgets.QWidget):
         filter_box.setStyleSheet(f"color: white; border: 1px solid {theme.BORDER_COLOR}; margin-top: 10px; padding: 10px;")
         fl = QtWidgets.QVBoxLayout(filter_box)
 
-        # Fila 1: Fechas
+        # Fila 1
         row1 = QtWidgets.QHBoxLayout()
         self.d1_prod = QtWidgets.QDateEdit(date.today().replace(day=1)); self.d1_prod.setCalendarPopup(True)
         self.d2_prod = QtWidgets.QDateEdit(date.today()); self.d2_prod.setCalendarPopup(True)
@@ -113,21 +111,19 @@ class ReportesScreen(QtWidgets.QWidget):
         btn_month = QtWidgets.QPushButton("Este Mes")
         btn_month.clicked.connect(lambda: self._set_date_range(self.d1_prod, self.d2_prod, "month"))
         
-        # --- NUEVO BOTÓN: TODOS ---
         btn_all = QtWidgets.QPushButton("Todos")
         btn_all.clicked.connect(lambda: self._set_date_range(self.d1_prod, self.d2_prod, "all"))
         
-        # Estilo para botones pequeños
         for b in [btn_week, btn_month, btn_all]: 
             b.setStyleSheet(f"background-color: #444; color: white; padding: 4px 10px; border-radius: 4px;")
             b.setCursor(QtCore.Qt.PointingHandCursor)
 
         row1.addWidget(QtWidgets.QLabel("Desde:")); row1.addWidget(self.d1_prod)
         row1.addWidget(QtWidgets.QLabel("Hasta:")); row1.addWidget(self.d2_prod)
-        row1.addWidget(btn_week); row1.addWidget(btn_month); row1.addWidget(btn_all) # Agregado
+        row1.addWidget(btn_week); row1.addWidget(btn_month); row1.addWidget(btn_all)
         row1.addStretch()
         
-        # Fila 2: Producto, Calidad, Buscar
+        # Fila 2
         row2 = QtWidgets.QHBoxLayout()
         self.cb_prod_filter = QtWidgets.QComboBox(); self.cb_prod_filter.addItem("Todos los Productos")
         self.cb_prod_filter.addItems(["Tablas", "Machihembrado", "Tablones", "Paletas"])
@@ -149,7 +145,8 @@ class ReportesScreen(QtWidgets.QWidget):
 
         content_split = QtWidgets.QSplitter(QtCore.Qt.Horizontal)
         self.table_prod = QtWidgets.QTableWidget()
-        cols = ["Fecha", "Lote", "Producto", "Calidad", "Cant.", "Bultos", "Estado"]
+        # --- AÑADIDO SKU ---
+        cols = ["Fecha", "Lote", "SKU", "Producto", "Calidad", "Cant.", "Bultos", "Estado"]
         self.table_prod.setColumnCount(len(cols)); self.table_prod.setHorizontalHeaderLabels(cols)
         self._style_table(self.table_prod)
         content_split.addWidget(self.table_prod)
@@ -181,11 +178,12 @@ class ReportesScreen(QtWidgets.QWidget):
                 
                 self.table_prod.setItem(row, 0, QtWidgets.QTableWidgetItem(str(r['fecha'])))
                 self.table_prod.setItem(row, 1, QtWidgets.QTableWidgetItem(str(r['lote'])))
-                self.table_prod.setItem(row, 2, QtWidgets.QTableWidgetItem(str(tipo)))
-                self.table_prod.setItem(row, 3, QtWidgets.QTableWidgetItem(str(r.get('quality', '-'))))
-                self.table_prod.setItem(row, 4, QtWidgets.QTableWidgetItem(f"{piezas:.0f}"))
-                self.table_prod.setItem(row, 5, QtWidgets.QTableWidgetItem(f"{piezas/factor:.0f}" if factor else "0"))
-                self.table_prod.setItem(row, 6, QtWidgets.QTableWidgetItem(str(r['status'])))
+                self.table_prod.setItem(row, 2, QtWidgets.QTableWidgetItem(str(r['sku']))) # SKU
+                self.table_prod.setItem(row, 3, QtWidgets.QTableWidgetItem(str(tipo)))
+                self.table_prod.setItem(row, 4, QtWidgets.QTableWidgetItem(str(r.get('quality', '-'))))
+                self.table_prod.setItem(row, 5, QtWidgets.QTableWidgetItem(f"{piezas:.0f}"))
+                self.table_prod.setItem(row, 6, QtWidgets.QTableWidgetItem(f"{piezas/factor:.0f}" if factor else "0"))
+                self.table_prod.setItem(row, 7, QtWidgets.QTableWidgetItem(str(r['status'])))
                 
                 stats[tipo] = stats.get(tipo, 0) + piezas
             if MATPLOTLIB_AVAILABLE: self._update_chart(self.chart_prod, stats, "Producción (Piezas)")
@@ -204,15 +202,9 @@ class ReportesScreen(QtWidgets.QWidget):
         self.d2_disp = QtWidgets.QDateEdit(date.today()); self.d2_disp.setCalendarPopup(True)
         self._estilizar_input(self.d1_disp); self._estilizar_input(self.d2_disp)
         
-        btn_week = QtWidgets.QPushButton("Esta Semana")
-        btn_week.clicked.connect(lambda: self._set_date_range(self.d1_disp, self.d2_disp, "week"))
-        
-        btn_month = QtWidgets.QPushButton("Este Mes")
-        btn_month.clicked.connect(lambda: self._set_date_range(self.d1_disp, self.d2_disp, "month"))
-        
-        # --- NUEVO BOTÓN: TODOS ---
-        btn_all = QtWidgets.QPushButton("Todos")
-        btn_all.clicked.connect(lambda: self._set_date_range(self.d1_disp, self.d2_disp, "all"))
+        btn_week = QtWidgets.QPushButton("Esta Semana"); btn_week.clicked.connect(lambda: self._set_date_range(self.d1_disp, self.d2_disp, "week"))
+        btn_month = QtWidgets.QPushButton("Este Mes"); btn_month.clicked.connect(lambda: self._set_date_range(self.d1_disp, self.d2_disp, "month"))
+        btn_all = QtWidgets.QPushButton("Todos"); btn_all.clicked.connect(lambda: self._set_date_range(self.d1_disp, self.d2_disp, "all"))
 
         for b in [btn_week, btn_month, btn_all]: 
             b.setStyleSheet(f"background-color: #444; color: white; padding: 4px 10px; border-radius: 4px;")
@@ -220,7 +212,7 @@ class ReportesScreen(QtWidgets.QWidget):
 
         row1.addWidget(QtWidgets.QLabel("Desde:")); row1.addWidget(self.d1_disp)
         row1.addWidget(QtWidgets.QLabel("Hasta:")); row1.addWidget(self.d2_disp)
-        row1.addWidget(btn_week); row1.addWidget(btn_month); row1.addWidget(btn_all) # Agregado
+        row1.addWidget(btn_week); row1.addWidget(btn_month); row1.addWidget(btn_all)
         row1.addStretch()
 
         row2 = QtWidgets.QHBoxLayout()
@@ -249,7 +241,8 @@ class ReportesScreen(QtWidgets.QWidget):
 
         content_split = QtWidgets.QSplitter(QtCore.Qt.Horizontal)
         self.table_disp = QtWidgets.QTableWidget()
-        cols = ["Fecha", "Guía", "Cliente", "Producto", "Lote", "Cant.", "Obs"]
+        # --- AÑADIDO SKU ---
+        cols = ["Fecha", "Guía", "Cliente", "Producto", "Lote", "SKU", "Cant.", "Obs"]
         self.table_disp.setColumnCount(len(cols)); self.table_disp.setHorizontalHeaderLabels(cols)
         self._style_table(self.table_disp)
         content_split.addWidget(self.table_disp)
@@ -282,8 +275,9 @@ class ReportesScreen(QtWidgets.QWidget):
                 self.table_disp.setItem(row, 2, QtWidgets.QTableWidgetItem(str(r['cliente'])))
                 self.table_disp.setItem(row, 3, QtWidgets.QTableWidgetItem(str(r['producto'])))
                 self.table_disp.setItem(row, 4, QtWidgets.QTableWidgetItem(str(r['lote'])))
-                self.table_disp.setItem(row, 5, QtWidgets.QTableWidgetItem(f"{r['cantidad']:.0f}"))
-                self.table_disp.setItem(row, 6, QtWidgets.QTableWidgetItem(str(r['obs'])))
+                self.table_disp.setItem(row, 5, QtWidgets.QTableWidgetItem(str(r['sku']))) # SKU
+                self.table_disp.setItem(row, 6, QtWidgets.QTableWidgetItem(f"{r['cantidad']:.0f}"))
+                self.table_disp.setItem(row, 7, QtWidgets.QTableWidgetItem(str(r['obs'])))
                 prod = r['producto']; stats[prod] = stats.get(prod, 0) + r['cantidad']
             if MATPLOTLIB_AVAILABLE: self._update_chart(self.chart_disp, stats, "Despachos (Piezas)")
         except Exception as e: QtWidgets.QMessageBox.critical(self, "Error", str(e))
@@ -317,7 +311,8 @@ class ReportesScreen(QtWidgets.QWidget):
         l.addLayout(h)
 
         self.table_lote = QtWidgets.QTableWidget()
-        cols = ["Lote", "Producto", "F. Prod", "Stock Actual", "Estado"]
+        # --- AÑADIDO SKU ---
+        cols = ["Lote", "SKU", "Producto", "F. Prod", "Stock Actual", "Estado"]
         self.table_lote.setColumnCount(len(cols)); self.table_lote.setHorizontalHeaderLabels(cols)
         self._style_table(self.table_lote)
         l.addWidget(self.table_lote)
@@ -335,10 +330,11 @@ class ReportesScreen(QtWidgets.QWidget):
             for r in data:
                 row = self.table_lote.rowCount(); self.table_lote.insertRow(row)
                 self.table_lote.setItem(row, 0, QtWidgets.QTableWidgetItem(str(r['lote'])))
-                self.table_lote.setItem(row, 1, QtWidgets.QTableWidgetItem(str(r['producto'])))
-                self.table_lote.setItem(row, 2, QtWidgets.QTableWidgetItem(str(r['fecha_prod'])))
-                self.table_lote.setItem(row, 3, QtWidgets.QTableWidgetItem(f"{r['stock_actual']:.0f}"))
-                self.table_lote.setItem(row, 4, QtWidgets.QTableWidgetItem(str(r['estado'])))
+                self.table_lote.setItem(row, 1, QtWidgets.QTableWidgetItem(str(r['sku']))) # SKU
+                self.table_lote.setItem(row, 2, QtWidgets.QTableWidgetItem(str(r['producto'])))
+                self.table_lote.setItem(row, 3, QtWidgets.QTableWidgetItem(str(r['fecha_prod'])))
+                self.table_lote.setItem(row, 4, QtWidgets.QTableWidgetItem(f"{r['stock_actual']:.0f}"))
+                self.table_lote.setItem(row, 5, QtWidgets.QTableWidgetItem(str(r['estado'])))
         except Exception as e: QtWidgets.QMessageBox.critical(self, "Error", str(e))
 
     def _style_table(self, t):
