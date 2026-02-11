@@ -214,3 +214,96 @@ def authenticate_user_plain(u, p):
     return {"id":us.id,"username":us.username,"role":us.role} if us and us.active and us.password_hash==p else None
 def delete_inventory_logical(iid): # Alias
     delete_inventory(iid)
+# ... (Todo lo anterior en repo.py se mantiene igual) ...
+
+# ---------- NUEVAS FUNCIONES PARA REPORTES AVANZADOS ----------
+
+def report_production_period(start_date, end_date):
+    """Retorna todo lo producido (ingresado) en un rango de fechas."""
+    with SessionLocal() as s:
+        stmt = (
+            select(Inventory, Product.name)
+            .join(Product, Inventory.product_id == Product.id)
+            .where(and_(
+                Inventory.prod_date >= start_date,
+                Inventory.prod_date <= end_date
+            ))
+            .order_by(Inventory.prod_date)
+        )
+        results = s.execute(stmt).all()
+        data = []
+        for inv, pname in results:
+            data.append({
+                "fecha": inv.prod_date,
+                "lote": inv.nro_lote,
+                "producto": pname,
+                "cantidad": float(inv.quantity), # Stock actual
+                "piezas_iniciales": inv.piezas or 0, # Lo que se produjo originalmente
+                "status": inv.status
+            })
+        return data
+
+def report_dispatches_detailed(start_date, end_date, client_id=None):
+    """
+    Reporte de: Qué salió, de qué lote y a qué cliente.
+    """
+    with SessionLocal() as s:
+        stmt = (
+            select(
+                Dispatch.date,
+                Dispatch.transport_guide,
+                Client.name,
+                Product.name,
+                Inventory.nro_lote,
+                Dispatch.quantity,
+                Dispatch.obs
+            )
+            .join(Inventory, Dispatch.inventory_id == Inventory.id)
+            .join(Product, Inventory.product_id == Product.id)
+            .join(Client, Dispatch.client_id == Client.id)
+            .where(and_(Dispatch.date >= start_date, Dispatch.date <= end_date))
+        )
+        
+        if client_id:
+            stmt = stmt.where(Dispatch.client_id == client_id)
+            
+        stmt = stmt.order_by(Dispatch.date.desc())
+        
+        results = s.execute(stmt).all()
+        return [{
+            "fecha": r[0], "guia": r[1], "cliente": r[2],
+            "producto": r[3], "lote": r[4], "cantidad": float(r[5]), "obs": r[6]
+        } for r in results]
+
+def report_by_lot_range(start_lote: int, end_lote: int):
+    """
+    Busca lotes en un rango numérico específico.
+    NOTA: Esto asume que los lotes son numéricos.
+    """
+    with SessionLocal() as s:
+        # Traemos todo y filtramos en Python para evitar problemas de cast en SQL con strings sucios
+        stmt = (
+            select(Inventory, Product.name)
+            .join(Product, Inventory.product_id == Product.id)
+        )
+        results = s.execute(stmt).all()
+        
+        data = []
+        for inv, pname in results:
+            try:
+                # Intentamos convertir el lote a entero
+                lote_num = int(inv.nro_lote)
+                if start_lote <= lote_num <= end_lote:
+                    data.append({
+                        "lote": inv.nro_lote,
+                        "producto": pname,
+                        "fecha_prod": inv.prod_date,
+                        "stock_actual": float(inv.quantity),
+                        "estado": inv.status
+                    })
+            except ValueError:
+                continue # Ignoramos lotes no numéricos (ej: "A-1")
+                
+        # Ordenamos por número de lote
+        data.sort(key=lambda x: int(x["lote"]))
+        return data
