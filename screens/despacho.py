@@ -49,14 +49,14 @@ class DespachoScreen(QtWidgets.QWidget):
         form_layout.addRow("Producto a Despachar:", prod_layout)
 
         self.spin_qty = QtWidgets.QSpinBox() 
-        self.spin_qty.setRange(0, 999999)
+        self.spin_qty.setRange(0, 100)
         self.spin_qty.setSuffix(" Bultos")
         self.spin_qty.setEnabled(False) 
         self.spin_qty.setStyleSheet(f"background-color: {theme.BG_INPUT}; color: white;")
         form_layout.addRow("Cantidad a Despachar:", self.spin_qty)
 
         self.inp_guide = QtWidgets.QLineEdit()
-        self.inp_guide.setPlaceholderText("Nro. Guía de Movilización (SADA/INSAI)")
+        self.inp_guide.setPlaceholderText("Nro. Guía de Movilización")
         self.inp_guide.setStyleSheet(f"background-color: {theme.BG_INPUT}; color: white; padding: 5px;")
         
         self.date_edit = QtWidgets.QDateEdit(calendarPopup=True)
@@ -82,7 +82,10 @@ class DespachoScreen(QtWidgets.QWidget):
         self.cb_client.clear()
         try:
             clients = repo.list_clients(solo_activos=True)
-            for c in clients: self.cb_client.addItem(c.name, c.id)
+            if not clients:
+                self.cb_client.addItem("-- Sin Clientes Registrados --", None)
+            else:
+                for c in clients: self.cb_client.addItem(c.name, c.id)
         except: pass
 
     def _open_product_selector(self):
@@ -105,7 +108,6 @@ class DespachoScreen(QtWidgets.QWidget):
         if inv.prod_date:
             f_prod = inv.prod_date.strftime("%d/%m/%Y")
 
-        # --- CAMBIO: Mostrar Fecha de Producción en el resumen ---
         info = (f"PROD: {p_name} | LOTE: {inv.nro_lote or '-'}\n"
                 f"📅 FABRICADO: {f_prod}\n" 
                 f"DISPONIBLE: {inv.quantity:.0f} Piezas (~{int(bultos_disponibles)} Bultos)")
@@ -119,19 +121,34 @@ class DespachoScreen(QtWidgets.QWidget):
         self.spin_qty.setFocus()
 
     def _process_dispatch(self):
+        # 1. Validar Lote Seleccionado
         if not self.selected_inventory:
-            QtWidgets.QMessageBox.warning(self, "Error", "Seleccione un lote.")
+            QtWidgets.QMessageBox.warning(self, "Error", "Seleccione un lote para despachar.")
             return
         
-        bultos_out = self.spin_qty.value()
-        if bultos_out <= 0:
-            QtWidgets.QMessageBox.warning(self, "Error", "La cantidad debe ser mayor a 0.")
+        # 2. Validar Cliente
+        client_id = self.cb_client.currentData()
+        if not client_id:
+            QtWidgets.QMessageBox.warning(self, "Error", "Seleccione un Cliente válido.")
+            self.cb_client.setFocus()
             return
 
-        # --- CAMBIO: VALIDACIÓN DE FECHAS ---
+        # 3. Validar Cantidad
+        bultos_out = self.spin_qty.value()
+        if bultos_out <= 0:
+            QtWidgets.QMessageBox.warning(self, "Error", "La cantidad a despachar debe ser mayor a 0.")
+            self.spin_qty.setFocus()
+            return
+
+        # 4. Validar Número de Guía (OBLIGATORIO)
+        nro_guia = self.inp_guide.text().strip()
+        if not nro_guia:
+            QtWidgets.QMessageBox.warning(self, "Falta Dato", "El **Número de Guía** es obligatorio para procesar el despacho.")
+            self.inp_guide.setFocus()
+            return
+
+        # 5. Validar Fechas (Despacho >= Producción)
         fecha_despacho = self.date_edit.date()
-        
-        # Convertir fecha de producción (objeto date de python) a QDate para comparar
         if self.selected_inventory.prod_date:
             py_date = self.selected_inventory.prod_date
             fecha_prod = QtCore.QDate(py_date.year, py_date.month, py_date.day)
@@ -139,24 +156,25 @@ class DespachoScreen(QtWidgets.QWidget):
             if fecha_despacho < fecha_prod:
                 QtWidgets.QMessageBox.warning(
                     self, "Fecha Inválida", 
-                    f"⛔ No se puede despachar antes de producir.\n\n"
-                    f"Fecha Producción: {fecha_prod.toString('dd/MM/yyyy')}\n"
-                    f"Fecha Despacho: {fecha_despacho.toString('dd/MM/yyyy')}\n\n"
-                    "Por favor, corrija la fecha de despacho."
+                    f"⛔ Error de Cronología.\n\n"
+                    f"El producto fue fabricado el: {fecha_prod.toString('dd/MM/yyyy')}\n"
+                    f"No puede despacharse con fecha anterior.\n"
                 )
                 return
-        # ------------------------------------
 
+        # --- Confirmación ---
         prod_type = getattr(self.selected_inventory, 'product_name', '')
         factor = FACTORES_CONVERSION.get(prod_type, 1)
         piezas_out = bultos_out * factor
-
         client_name = self.cb_client.currentText()
+
         confirm = QtWidgets.QMessageBox.question(
             self, "Confirmar Despacho",
-            f"Despachar: {bultos_out} Bultos\n"
-            f"(Equivalente a {piezas_out:.0f} piezas)\n"
-            f"Cliente: {client_name}",
+            f"¿Procesar salida de mercancía?\n\n"
+            f"📦 Producto: {prod_type}\n"
+            f"🔢 Cantidad: {bultos_out} Bultos ({piezas_out:.0f} pzas)\n"
+            f"🚛 Cliente: {client_name}\n"
+            f"📄 Guía: {nro_guia}",
             QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No
         )
         
@@ -164,19 +182,20 @@ class DespachoScreen(QtWidgets.QWidget):
             try:
                 data = {
                     "inventory_id": self.selected_inventory.id,
-                    "client_id": self.cb_client.currentData(),
+                    "client_id": client_id,
                     "quantity": piezas_out, 
                     "date": self.date_edit.date().toPython(),
-                    "guide": self.inp_guide.text(),
+                    "guide": nro_guia,
                     "obs": f"Salida de {bultos_out} bultos"
                 }
                 repo.create_dispatch(data)
                 
-                QtWidgets.QMessageBox.information(self, "Éxito", "Despacho registrado.")
+                QtWidgets.QMessageBox.information(self, "Éxito", "Despacho registrado correctamente.")
                 
+                # Limpiar formulario
                 self.selected_inventory = None
                 self.lbl_prod_info.setText("Ningún lote seleccionado")
-                self.lbl_prod_info.setStyleSheet("color: #ff6b6b;")
+                self.lbl_prod_info.setStyleSheet("color: #ff6b6b; font-style: italic;")
                 self.spin_qty.setValue(0)
                 self.spin_qty.setEnabled(False)
                 self.inp_guide.clear()
