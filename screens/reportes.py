@@ -1,7 +1,8 @@
 from PySide6 import QtCore, QtWidgets, QtGui
-from datetime import date, timedelta
+from datetime import date, timedelta, datetime
 from core import repo, theme
 import sys
+import os
 
 # Factores
 FACTORES_CONVERSION = { "Tablas": 30, "Tablones": 20, "Paletas": 10, "Machihembrado": 5 }
@@ -23,25 +24,87 @@ class MplCanvas(FigureCanvas):
         self.axes = fig.add_subplot(111)
         super().__init__(fig)
 
+# --- FUNCIÓN DE EXPORTACIÓN CON DISEÑO ---
 def exportar_tabla_excel(parent, table_widget, filename_base):
-    try: import openpyxl
-    except ImportError: QtWidgets.QMessageBox.warning(parent, "Error", "Instale openpyxl"); return
+    try:
+        import openpyxl
+        from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+        from openpyxl.drawing.image import Image as XLImage
+        from openpyxl.utils import get_column_letter
+    except ImportError:
+        QtWidgets.QMessageBox.warning(parent, "Error", "Se requiere 'openpyxl' y 'pillow'.\nInstale: pip install openpyxl pillow")
+        return
+
     path, _ = QtWidgets.QFileDialog.getSaveFileName(parent, "Exportar", f"{filename_base}.xlsx", "Excel (*.xlsx)")
     if not path: return
+
     try:
-        wb = openpyxl.Workbook(); ws = wb.active
-        headers = [table_widget.horizontalHeaderItem(c).text() for c in range(table_widget.columnCount())]
-        ws.append(headers)
-        for r in range(table_widget.rowCount()):
-            row = []
-            for c in range(table_widget.columnCount()):
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Reporte"
+        
+        # --- ESTILOS ---
+        header_fill = PatternFill(start_color="1b1b26", end_color="1b1b26", fill_type="solid") # Color oscuro del tema
+        header_font = Font(name="Arial", size=10, bold=True, color="FFFFFF")
+        row_font = Font(name="Arial", size=10)
+        thin_border = Border(left=Side(style='thin'), right=Side(style='thin'), top=Side(style='thin'), bottom=Side(style='thin'))
+        
+        # --- LOGO Y ENCABEZADO ---
+        # Insertar logo si existe
+        if os.path.exists("logo.png"):
+            try:
+                img = XLImage("logo.png")
+                img.height = 50; img.width = 50 # Ajustar tamaño pequeño
+                ws.add_image(img, "A1")
+            except: pass # Si falla la carga de imagen, seguimos
+        
+        ws.merge_cells("B2:E2")
+        ws["B2"] = f"REPORTE: {filename_base.upper().replace('_', ' ')}"
+        ws["B2"].font = Font(size=14, bold=True)
+        ws["B3"] = f"Generado: {datetime.now().strftime('%d/%m/%Y %H:%M')}"
+        
+        # --- TABLA (Inicia en fila 5) ---
+        start_row = 5
+        col_count = table_widget.columnCount()
+        
+        # Encabezados
+        for c in range(col_count):
+            header_text = table_widget.horizontalHeaderItem(c).text()
+            cell = ws.cell(row=start_row, column=c+1, value=header_text)
+            cell.fill = header_fill
+            cell.font = header_font
+            cell.alignment = Alignment(horizontal="center", vertical="center")
+            cell.border = thin_border
+            
+            # Ajustar ancho inicial
+            ws.column_dimensions[get_column_letter(c+1)].width = 20
+
+        # Datos
+        row_count = table_widget.rowCount()
+        for r in range(row_count):
+            current_row = start_row + 1 + r
+            for c in range(col_count):
                 it = table_widget.item(r, c)
-                txt = it.text() if it else ""
-                try: row.append(float(txt))
-                except: row.append(txt)
-            ws.append(row)
-        wb.save(path); QtWidgets.QMessageBox.information(parent, "Éxito", f"Guardado: {path}")
-    except Exception as e: QtWidgets.QMessageBox.critical(parent, "Error", str(e))
+                text = it.text() if it else ""
+                
+                # Intentar convertir a número para que Excel lo reconozca
+                try: val = float(text)
+                except: val = text
+                
+                cell = ws.cell(row=current_row, column=c+1, value=val)
+                cell.font = row_font
+                cell.border = thin_border
+                cell.alignment = Alignment(horizontal="left" if isinstance(val, str) else "right")
+
+        wb.save(path)
+        QtWidgets.QMessageBox.information(parent, "Éxito", f"Reporte generado exitosamente:\n{path}")
+
+    except Exception as e:
+        QtWidgets.QMessageBox.critical(parent, "Error", f"Error exportando: {str(e)}")
+
+# ... (EL RESTO DE LA CLASE ReportesScreen SIGUE IGUAL QUE ANTES) ...
+# Solo asegúrate de copiar la clase ReportesScreen completa del paso anterior si no la tienes, 
+# pero reemplazando la función exportar_tabla_excel con esta nueva versión.
 
 class ReportesScreen(QtWidgets.QWidget):
     def __init__(self, parent=None):
@@ -145,7 +208,7 @@ class ReportesScreen(QtWidgets.QWidget):
 
         content_split = QtWidgets.QSplitter(QtCore.Qt.Horizontal)
         self.table_prod = QtWidgets.QTableWidget()
-        cols = ["Fecha", "Lote", "SKU", "Producto", "Calidad", "Cant. (Pzas)", "Bultos", "Estado"]
+        cols = ["Fecha", "Lote", "SKU", "Producto", "Calidad", "Cant.", "Bultos", "Estado"]
         self.table_prod.setColumnCount(len(cols)); self.table_prod.setHorizontalHeaderLabels(cols)
         self._style_table(self.table_prod)
         content_split.addWidget(self.table_prod)
@@ -240,8 +303,8 @@ class ReportesScreen(QtWidgets.QWidget):
 
         content_split = QtWidgets.QSplitter(QtCore.Qt.Horizontal)
         self.table_disp = QtWidgets.QTableWidget()
-        # --- NUEVA COLUMNA: BULTOS ---
-        cols = ["Fecha", "Guía", "Cliente", "Producto", "Lote", "SKU", "Cant. (Pzas)", "Bultos", "Obs"]
+        # --- AÑADIDO SKU ---
+        cols = ["Fecha", "Guía", "Cliente", "Producto", "Lote", "SKU", "Cant.", "Bultos", "Obs"]
         self.table_disp.setColumnCount(len(cols)); self.table_disp.setHorizontalHeaderLabels(cols)
         self._style_table(self.table_disp)
         content_split.addWidget(self.table_disp)
@@ -282,7 +345,7 @@ class ReportesScreen(QtWidgets.QWidget):
                 self.table_disp.setItem(row, 4, QtWidgets.QTableWidgetItem(str(r['lote'])))
                 self.table_disp.setItem(row, 5, QtWidgets.QTableWidgetItem(str(r['sku'])))
                 self.table_disp.setItem(row, 6, QtWidgets.QTableWidgetItem(f"{cant_pzas:.0f}"))
-                self.table_disp.setItem(row, 7, QtWidgets.QTableWidgetItem(f"{bultos:.1f}")) # BULTOS
+                self.table_disp.setItem(row, 7, QtWidgets.QTableWidgetItem(f"{bultos:.0f}"))
                 self.table_disp.setItem(row, 8, QtWidgets.QTableWidgetItem(str(r['obs'])))
                 
                 stats[tipo] = stats.get(tipo, 0) + cant_pzas
@@ -318,8 +381,7 @@ class ReportesScreen(QtWidgets.QWidget):
         l.addLayout(h)
 
         self.table_lote = QtWidgets.QTableWidget()
-        # --- NUEVA COLUMNA: BULTOS ---
-        cols = ["Lote", "SKU", "Producto", "F. Prod", "Stock Actual (Pzas)", "Bultos", "Estado"]
+        cols = ["Lote", "SKU", "Producto", "F. Prod", "Stock Actual", "Bultos", "Estado"]
         self.table_lote.setColumnCount(len(cols)); self.table_lote.setHorizontalHeaderLabels(cols)
         self._style_table(self.table_lote)
         l.addWidget(self.table_lote)
@@ -347,7 +409,7 @@ class ReportesScreen(QtWidgets.QWidget):
                 self.table_lote.setItem(row, 2, QtWidgets.QTableWidgetItem(tipo))
                 self.table_lote.setItem(row, 3, QtWidgets.QTableWidgetItem(str(r['fecha_prod'])))
                 self.table_lote.setItem(row, 4, QtWidgets.QTableWidgetItem(f"{stock:.0f}"))
-                self.table_lote.setItem(row, 5, QtWidgets.QTableWidgetItem(f"{bultos:.1f}")) # BULTOS
+                self.table_lote.setItem(row, 5, QtWidgets.QTableWidgetItem(f"{bultos:.1f}"))
                 self.table_lote.setItem(row, 6, QtWidgets.QTableWidgetItem(str(r['estado'])))
         except Exception as e: QtWidgets.QMessageBox.critical(self, "Error", str(e))
 

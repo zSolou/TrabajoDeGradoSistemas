@@ -1,6 +1,7 @@
 import os
 from PySide6 import QtCore, QtWidgets, QtGui
 from core import repo, theme
+from datetime import datetime
 
 FACTORES_CONVERSION = {
     "Tablas": 30, "Tablones": 20, "Paletas": 10, "Machihembrado": 5
@@ -114,11 +115,9 @@ class InventarioScreen(QtWidgets.QWidget):
         self.search_exist.setStyleSheet(f"background-color: {theme.BG_INPUT}; color: white; padding: 6px; border-radius: 4px;")
         self.search_exist.textChanged.connect(self._filtrar_existencias)
         
-        # --- CAMBIO: Checkbox para Mostrar Agotados ---
         self.chk_show_exhausted = QtWidgets.QCheckBox("Mostrar Agotados/Bajas")
         self.chk_show_exhausted.setStyleSheet("color: white; font-weight: bold;")
         self.chk_show_exhausted.stateChanged.connect(self.refresh)
-        # ----------------------------------------------
         
         btn_edit = QtWidgets.QPushButton("✎ Editar"); btn_edit.clicked.connect(self._editar_producto)
         btn_del = QtWidgets.QPushButton("📉 Dar de Baja"); btn_del.clicked.connect(self._dar_baja_producto)
@@ -129,7 +128,7 @@ class InventarioScreen(QtWidgets.QWidget):
         self._estilizar_boton(btn_xls, "#217346")
         
         top_bar.addWidget(self.search_exist)
-        top_bar.addWidget(self.chk_show_exhausted) # Agregado al layout
+        top_bar.addWidget(self.chk_show_exhausted)
         top_bar.addWidget(btn_edit)
         top_bar.addWidget(btn_del)
         top_bar.addWidget(btn_xls)
@@ -182,10 +181,8 @@ class InventarioScreen(QtWidgets.QWidget):
 
     def refresh(self):
         try:
-            # --- CAMBIO: Pasamos el estado del checkbox al repo ---
             mostrar_todo = self.chk_show_exhausted.isChecked()
             self.data_existencias = repo.list_inventory_rows(mostrar_agotados=mostrar_todo)
-            # ----------------------------------------------------
             self._llenar_existencias(self.data_existencias)
             
             self.data_historial = repo.list_dispatches_history()
@@ -204,7 +201,6 @@ class InventarioScreen(QtWidgets.QWidget):
             factor = FACTORES_CONVERSION.get(tipo, 1)
             bultos = int(qty / factor) if factor else 0
             
-            # Colorear texto si está agotado
             status = r.get("status")
             if qty == 0: status = "AGOTADO/BAJA"
 
@@ -217,10 +213,7 @@ class InventarioScreen(QtWidgets.QWidget):
             for i, v in enumerate(vals):
                 it = QtWidgets.QTableWidgetItem(str(v or ""))
                 if i==0: it.setData(QtCore.Qt.UserRole, r)
-                
-                # Visual: gris si está agotado
                 if qty == 0: it.setForeground(QtGui.QColor("gray"))
-                
                 self.table_exist.setItem(row, i, it)
 
     def _llenar_historial(self, data):
@@ -257,11 +250,9 @@ class InventarioScreen(QtWidgets.QWidget):
         if row < 0: return None
         return self.table_exist.item(row, 0).data(QtCore.Qt.UserRole)
 
-    # --- CAMBIO: Lógica de Dar de Baja ---
     def _dar_baja_producto(self):
         data = self._get_selected_existencia()
         if not data: return
-        
         if float(data['quantity']) == 0:
             QtWidgets.QMessageBox.information(self, "Info", "Este producto ya está agotado.")
             return
@@ -274,7 +265,6 @@ class InventarioScreen(QtWidgets.QWidget):
             repo.delete_inventory(data['id'])
             self.refresh()
             QtWidgets.QMessageBox.information(self, "Listo", "Producto dado de baja.")
-    # -------------------------------------
 
     def _editar_producto(self):
         data = self._get_selected_existencia()
@@ -284,23 +274,73 @@ class InventarioScreen(QtWidgets.QWidget):
             repo.update_inventory(dlg.get_data())
             self.refresh()
 
+    # --- NUEVA FUNCIÓN DE EXPORTACIÓN CON DISEÑO ---
     def _exportar_excel(self, tipo):
-        try: import openpyxl
-        except: QtWidgets.QMessageBox.warning(self, "Error", "Instale openpyxl"); return
+        try:
+            import openpyxl
+            from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+            from openpyxl.drawing.image import Image as XLImage
+            from openpyxl.utils import get_column_letter
+        except ImportError:
+            QtWidgets.QMessageBox.warning(self, "Error", "Instale openpyxl y pillow")
+            return
+
         filename = "inventario.xlsx" if tipo == "existencias" else "historial.xlsx"
         path, _ = QtWidgets.QFileDialog.getSaveFileName(self, "Guardar", filename, "Excel (*.xlsx)")
         if not path: return
+
         try:
-            wb = openpyxl.Workbook(); ws = wb.active
-            if tipo == "existencias":
-                ws.append(["ID", "SKU", "LOTE", "Producto", "Existencia", "Bultos", "F. Prod", "Estado", "Largo", "Ancho", "Espesor", "Calidad", "Secado", "Cepillado", "Impregnado", "Obs"])
-                for r in self.data_existencias:
-                    f = FACTORES_CONVERSION.get(r.get("product_type"), 1); q = float(r.get("quantity", 0))
-                    ws.append([r.get("id"), r.get("sku"), r.get("nro_lote"), r.get("product_type"), q, int(q/f), str(r.get("prod_date")), r.get("status"), float(r.get("largo") or 0), float(r.get("ancho") or 0), float(r.get("espesor") or 0), r.get("quality"), r.get("drying"), r.get("planing"), r.get("impregnated"), r.get("obs")])
-            else:
-                ws.append(["ID", "Fecha", "Guía", "Cliente", "Producto", "Lote", "SKU", "Cant. Salida", "Bultos Salida", "Obs"])
-                for r in self.data_historial:
-                    f = FACTORES_CONVERSION.get(r.get("type"), 1); q = float(r.get("quantity", 0))
-                    ws.append([r.get("id"), str(r.get("date")), r.get("guide"), r.get("client"), r.get("product"), r.get("lote"), r.get("sku"), q, int(q/f), r.get("obs")])
-            wb.save(path); QtWidgets.QMessageBox.information(self, "Éxito", f"Guardado en:\n{path}")
-        except Exception as e: QtWidgets.QMessageBox.critical(self, "Error", str(e))
+            wb = openpyxl.Workbook()
+            ws = wb.active
+            ws.title = "Reporte"
+            
+            # Estilos
+            header_fill = PatternFill(start_color="1b1b26", end_color="1b1b26", fill_type="solid")
+            header_font = Font(name="Arial", size=10, bold=True, color="FFFFFF")
+            row_font = Font(name="Arial", size=10)
+            thin_border = Border(left=Side(style='thin'), right=Side(style='thin'), top=Side(style='thin'), bottom=Side(style='thin'))
+
+            # Logo
+            if os.path.exists("logo.png"):
+                try:
+                    img = XLImage("logo.png")
+                    img.height = 50; img.width = 50
+                    ws.add_image(img, "A1")
+                except: pass
+
+            # Título
+            ws.merge_cells("B2:E2")
+            titulo = "EXISTENCIAS EN PATIO" if tipo == "existencias" else "HISTORIAL DE DESPACHOS"
+            ws["B2"] = titulo
+            ws["B2"].font = Font(size=14, bold=True)
+            ws["B3"] = f"Fecha: {datetime.now().strftime('%d/%m/%Y %H:%M')}"
+
+            # Datos y Encabezados
+            start_row = 5
+            table_widget = self.table_exist if tipo == "existencias" else self.table_hist
+            col_count = table_widget.columnCount()
+
+            # Header
+            for c in range(col_count):
+                cell = ws.cell(row=start_row, column=c+1, value=table_widget.horizontalHeaderItem(c).text())
+                cell.fill = header_fill; cell.font = header_font
+                cell.alignment = Alignment(horizontal="center", vertical="center")
+                cell.border = thin_border
+                ws.column_dimensions[get_column_letter(c+1)].width = 18
+
+            # Filas
+            for r in range(table_widget.rowCount()):
+                for c in range(col_count):
+                    it = table_widget.item(r, c)
+                    txt = it.text() if it else ""
+                    try: val = float(txt)
+                    except: val = txt
+                    
+                    cell = ws.cell(row=start_row + 1 + r, column=c+1, value=val)
+                    cell.font = row_font; cell.border = thin_border
+                    cell.alignment = Alignment(horizontal="left" if isinstance(val, str) else "right")
+
+            wb.save(path)
+            QtWidgets.QMessageBox.information(self, "Éxito", f"Reporte guardado:\n{path}")
+        except Exception as e:
+            QtWidgets.QMessageBox.critical(self, "Error", str(e))
