@@ -13,8 +13,6 @@ class MainScreen(QtWidgets.QWidget):
         super().__init__()
         self.current_user = current_user
         self._setup_ui()
-        # Conectar señales globales si es necesario
-        # self.reg_screen.saved_signal.connect(self._on_product_registered)
 
     def _setup_ui(self):
         # Layout principal (Horizontal: Menú + Contenido)
@@ -40,7 +38,7 @@ class MainScreen(QtWidgets.QWidget):
         # Botones de Navegación
         self.btn_inv = self._create_nav_button("📦 Inventario")
         self.btn_reg = self._create_nav_button("📝 Registrar Prod.")
-        self.btn_desp = self._create_nav_button("🚚 Despacho") # Botón Despacho
+        self.btn_desp = self._create_nav_button("🚚 Despacho")
         self.btn_rep = self._create_nav_button("📊 Reportes")
         self.btn_cli = self._create_nav_button("👥 Clientes")
         self.btn_res = self._create_nav_button("💾 Respaldo")
@@ -68,29 +66,29 @@ class MainScreen(QtWidgets.QWidget):
         self.stack = QtWidgets.QStackedWidget()
         
         # Instancias de las pantallas
-        self.inv_screen = InventarioScreen()
-        self.reg_screen = RegistrarForm()
-        self.desp_screen = DespachoScreen()
-        self.rep_screen = ReportesScreen()
-        self.cli_screen = ClientesScreen()
-        self.res_screen = RespaldoScreen()
-        self.man_screen = ManualScreen()
+        self.inv_screen = InventarioScreen()   # Índice 0
+        self.reg_screen = RegistrarForm()      # Índice 1
+        self.desp_screen = DespachoScreen()    # Índice 2
+        self.rep_screen = ReportesScreen()     # Índice 3
+        self.cli_screen = ClientesScreen()     # Índice 4
+        self.res_screen = RespaldoScreen()     # Índice 5
+        self.man_screen = ManualScreen()       # Índice 6
 
-        # Conectar señal de registro exitoso para refrescar inventario
+        # Conectar señal de registro exitoso
         self.reg_screen.saved_signal.connect(self._on_product_registered)
 
-        # Añadir al stack (El orden importa para los índices 0, 1, 2...)
-        self.stack.addWidget(self.inv_screen)  # 0
-        self.stack.addWidget(self.reg_screen)  # 1
-        self.stack.addWidget(self.desp_screen) # 2
-        self.stack.addWidget(self.rep_screen)  # 3
-        self.stack.addWidget(self.cli_screen)  # 4
-        self.stack.addWidget(self.res_screen)  # 5
-        self.stack.addWidget(self.man_screen)  # 6
+        # Añadir al stack (El orden es CRÍTICO)
+        self.stack.addWidget(self.inv_screen)
+        self.stack.addWidget(self.reg_screen)
+        self.stack.addWidget(self.desp_screen)
+        self.stack.addWidget(self.rep_screen)
+        self.stack.addWidget(self.cli_screen)
+        self.stack.addWidget(self.res_screen)
+        self.stack.addWidget(self.man_screen)
 
         main_layout.addWidget(self.stack)
 
-        # Conectar clics
+        # Conectar clics a la navegación
         self.btn_inv.clicked.connect(lambda: self._navigate(0, self.btn_inv))
         self.btn_reg.clicked.connect(lambda: self._navigate(1, self.btn_reg))
         self.btn_desp.clicked.connect(lambda: self._navigate(2, self.btn_desp))
@@ -126,43 +124,38 @@ class MainScreen(QtWidgets.QWidget):
     def _navigate(self, index, button):
         self.stack.setCurrentIndex(index)
         
-        # --- AQUÍ ESTABA EL DETALLE ---
-        # Lista de TODOS los botones para limpiar su estilo
+        # 1. Limpiar estilo de TODOS los botones
         all_buttons = [
-            self.btn_inv, 
-            self.btn_reg, 
-            self.btn_desp,  # <--- Faltaba este en tu código anterior
-            self.btn_rep, 
-            self.btn_cli, 
-            self.btn_res, 
-            self.btn_man
+            self.btn_inv, self.btn_reg, self.btn_desp, 
+            self.btn_rep, self.btn_cli, self.btn_res, self.btn_man
         ]
         
-        # 1. Resetear todos a gris
         for btn in all_buttons:
             style = btn.styleSheet()
-            # Reemplazar el color de acento por el gris secundario
             style = style.replace(f"color: {theme.ACCENT_COLOR};", f"color: {theme.TEXT_SECONDARY};")
-            # Quitar borde izquierdo si lo tuviera (indicador de activo)
             style = style.replace(f"border-left: 4px solid {theme.ACCENT_COLOR};", "border: none;")
             style = style.replace("font-weight: bold;", "")
-            style = style.replace("background-color: #1b1b26;", "background-color: transparent;") # Fondo activo
+            style = style.replace("background-color: #1b1b26;", "background-color: transparent;")
             btn.setStyleSheet(style)
         
-        # 2. Marcar el activo (verde y negrita)
+        # 2. Marcar botón activo
         active_style = button.styleSheet()
         active_style = active_style.replace(f"color: {theme.TEXT_SECONDARY};", f"color: {theme.ACCENT_COLOR};")
         active_style += f" font-weight: bold; border-left: 4px solid {theme.ACCENT_COLOR}; background-color: #1b1b26;"
         button.setStyleSheet(active_style)
         
-        # Refrescar datos automáticamente al entrar
-        if index == 0: # Inventario
-            self.inv_screen.refresh()
-        elif index == 2: # Despacho
-            self.desp_screen.refresh_clients()
-        elif index == 4: # Clientes
-            self.cli_screen.refresh()
+        # 3. Refrescar datos (Protegido contra errores)
+        try:
+            if index == 0: # Inventario
+                self.inv_screen.refresh()
+            elif index == 2: # Despacho
+                self.desp_screen.refresh_clients()
+            elif index == 4: # Clientes
+                self.cli_screen.refresh()
+        except Exception as e:
+            print(f"Advertencia al refrescar pantalla {index}: {e}")
+            # No mostramos popup para no interrumpir la navegación
 
     def _on_product_registered(self, data):
-        """Callback cuando se registra un producto exitosamente."""
-        self._navigate(0, self.btn_inv) # Ir al inventario automáticamente
+        """Al guardar un producto, volvemos al inventario."""
+        self._navigate(0, self.btn_inv)

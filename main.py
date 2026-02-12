@@ -1,4 +1,3 @@
-# main.py (ajuste)
 import sys
 from PySide6 import QtWidgets
 from screens.login import LoginScreen
@@ -23,11 +22,11 @@ def main():
         nonlocal w
         # Crear la ventana principal pasando el usuario actual
         w = MainScreen(current_user=user)
-        try:
-            # Cargar inventario inicial desde la BD
-            w.inventario.refresh_from_db(repo)
-        except Exception as e:
-            QtWidgets.QMessageBox.warning(None, "Advertencia", f"No se pudo cargar inventario: {e}")
+        
+        # NOTA: MainScreen ya carga los datos automáticamente al iniciar
+        # (en su constructor llama a _navigate(0) -> refresh()), 
+        # por lo que no necesitamos llamar a nada manualmente aquí.
+        
         w.show()
         login.close()
 
