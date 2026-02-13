@@ -283,8 +283,8 @@ class ReportesScreen(QtWidgets.QWidget):
         l = QtWidgets.QVBoxLayout(parent)
         h = QtWidgets.QHBoxLayout(); h.setSpacing(15)
         
-        self.s_l1 = QtWidgets.QSpinBox(); self.s_l1.setRange(0, 999999); self.s_l1.setPrefix("Lote ")
-        self.s_l2 = QtWidgets.QSpinBox(); self.s_l2.setRange(0, 999999); self.s_l2.setPrefix("Lote ")
+        self.s_l1 = QtWidgets.QSpinBox(); self.s_l1.setRange(0, 999); self.s_l1.setPrefix("Lote ")
+        self.s_l2 = QtWidgets.QSpinBox(); self.s_l2.setRange(0, 999); self.s_l2.setPrefix("Lote ")
         self._estilizar_input(self.s_l1); self._estilizar_input(self.s_l2)
 
         self.cb_lote_prod = QtWidgets.QComboBox(); self.cb_lote_prod.addItems(["Todos los Productos", "Tablas", "Machihembrado", "Tablones", "Paletas"])

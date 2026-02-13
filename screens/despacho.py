@@ -49,21 +49,25 @@ class DespachoScreen(QtWidgets.QWidget):
         form_layout.addRow("Producto a Despachar:", prod_layout)
 
         self.spin_qty = QtWidgets.QSpinBox() 
-        self.spin_qty.setRange(0, 100)
+        self.spin_qty.setRange(0, 999999)
         self.spin_qty.setSuffix(" Bultos")
         self.spin_qty.setEnabled(False) 
         self.spin_qty.setStyleSheet(f"background-color: {theme.BG_INPUT}; color: white;")
         form_layout.addRow("Cantidad a Despachar:", self.spin_qty)
 
         self.inp_guide = QtWidgets.QLineEdit()
-        self.inp_guide.setPlaceholderText("Nro. Guía de Movilización")
+        self.inp_guide.setPlaceholderText("Nro. Guía de Movilización (SADA/INSAI)")
         self.inp_guide.setStyleSheet(f"background-color: {theme.BG_INPUT}; color: white; padding: 5px;")
+        
+        # --- CAMBIO: LÍMITE MÁXIMO DE CARACTERES PARA LA GUÍA ---
+        self.inp_guide.setMaxLength(10)
+        # --------------------------------------------------------
         
         self.date_edit = QtWidgets.QDateEdit(calendarPopup=True)
         self.date_edit.setDate(date.today())
         self.date_edit.setStyleSheet(f"background-color: {theme.BG_INPUT}; color: white;")
         
-        form_layout.addRow("Nro. Guía:", self.inp_guide)
+        form_layout.addRow("Nro. Guía (Máx 10):", self.inp_guide) # Etiqueta actualizada
         form_layout.addRow("Fecha Despacho:", self.date_edit)
 
         layout.addWidget(form_frame)
