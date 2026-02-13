@@ -197,13 +197,13 @@ class RegistrarForm(QtWidgets.QWidget):
         self.prod_date = self._create_date_edit()
 
         # Medidas
-        self.largo = self._create_spinbox("m", 6.00) 
+        self.largo = self._create_spinbox("m", 8.00) 
         self.ancho = self._create_spinbox("cm", 30.00)
         self.espesor = self._create_spinbox("cm", 30.00)
         
         # Cantidad en Bultos
         self.piezas = QtWidgets.QSpinBox()
-        self.piezas.setRange(0, 1000000)
+        self.piezas.setRange(0, 100)
         self.piezas.setSuffix(" Bultos")
         self.piezas.setStyleSheet(f"background-color: {theme.BG_INPUT}; color: white; border: 1px solid {theme.BORDER_COLOR}; padding: 4px; border-radius: 4px;")
 

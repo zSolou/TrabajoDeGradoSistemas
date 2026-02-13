@@ -11,62 +11,115 @@ class EditarProductoDialog(QtWidgets.QDialog):
     def __init__(self, data, parent=None):
         super().__init__(parent)
         self.data = data
-        self.setWindowTitle(f"Editar Lote {data.get('nro_lote', '')}")
-        self.setModal(True); self.resize(500, 600)
+        self.recover_status = None # Control de recuperación
+        self.setWindowTitle(f"Visualizar Lote {data.get('nro_lote', '')}")
+        self.setModal(True); self.resize(500, 650)
         self.setStyleSheet(f"background-color: {theme.BG_SIDEBAR}; color: {theme.TEXT_PRIMARY};")
         self._build_ui()
 
     def _build_ui(self):
         layout = QtWidgets.QVBoxLayout(self)
+        
+        # --- MENSAJE DE SEGURIDAD ---
+        info_lbl = QtWidgets.QLabel("🔒 MODO LECTURA - SOLO OBSERVACIONES EDITABLES")
+        info_lbl.setStyleSheet("color: #ffa500; font-weight: bold; padding: 5px; border-bottom: 1px solid #ffa500;")
+        info_lbl.setAlignment(QtCore.Qt.AlignCenter)
+        layout.addWidget(info_lbl)
+
         scroll = QtWidgets.QScrollArea(); scroll.setWidgetResizable(True)
         scroll.setStyleSheet("background-color: transparent; border: none;")
         content = QtWidgets.QWidget(); form = QtWidgets.QFormLayout(content); form.setSpacing(12)
         
+        # --- CAMPOS BLOQUEADOS (READ ONLY) ---
         self.inp_lote = QtWidgets.QLineEdit(self.data.get('nro_lote', ''))
-        self.inp_lote.setStyleSheet(f"background-color: {theme.BG_INPUT}; border: 1px solid {theme.BORDER_COLOR}; padding: 4px; color: white;")
+        self.inp_lote.setReadOnly(True)
+        self.inp_lote.setStyleSheet(f"background-color: {theme.BG_INPUT}; border: 1px solid {theme.BORDER_COLOR}; color: #888; padding: 4px;")
         
-        self.inp_qty = self._spinbox(float(self.data.get('quantity', 0)))
-        self.inp_l = self._spinbox(float(self.data.get('largo', 0)))
-        self.inp_a = self._spinbox(float(self.data.get('ancho', 0)))
-        self.inp_e = self._spinbox(float(self.data.get('espesor', 0)))
+        self.inp_qty = self._spinbox(float(self.data.get('quantity', 0)), locked=True)
+        self.inp_l = self._spinbox(float(self.data.get('largo', 0)), locked=True)
+        self.inp_a = self._spinbox(float(self.data.get('ancho', 0)), locked=True)
+        self.inp_e = self._spinbox(float(self.data.get('espesor', 0)), locked=True)
         
         self.inp_date = QtWidgets.QDateEdit(calendarPopup=True)
         try:
             d = str(self.data.get('prod_date')).split("T")[0]
             self.inp_date.setDate(QtCore.QDate.fromString(d, "yyyy-MM-dd"))
         except: self.inp_date.setDate(QtCore.QDate.currentDate())
-        self.inp_date.setStyleSheet(f"background-color: {theme.BG_INPUT}; color: white; padding: 4px;")
+        self.inp_date.setReadOnly(True); self.inp_date.setDisabled(True)
+        self.inp_date.setStyleSheet(f"background-color: {theme.BG_INPUT}; color: #888; padding: 4px;")
 
-        self.inp_calidad = QtWidgets.QComboBox(); self.inp_calidad.addItems(["Tipo 1", "Tipo 2", "Tipo 3", "Tipo 4"])
-        self.inp_calidad.setCurrentText(self.data.get('quality', ''))
-        self.inp_calidad.setStyleSheet(f"background-color: {theme.BG_INPUT}; color: white; padding: 4px;")
+        self.inp_calidad = QtWidgets.QLineEdit(self.data.get('quality', ''))
+        self.inp_calidad.setReadOnly(True)
+        self.inp_calidad.setStyleSheet(f"background-color: {theme.BG_INPUT}; color: #888; padding: 4px;")
 
-        self.inp_obs = QtWidgets.QPlainTextEdit(str(self.data.get('obs') or "")); self.inp_obs.setFixedHeight(60)
-        self.inp_obs.setStyleSheet(f"background-color: {theme.BG_INPUT}; color: white;")
+        # --- OBSERVACIONES (EDITABLE) ---
+        self.inp_obs = QtWidgets.QPlainTextEdit(str(self.data.get('obs') or "")); self.inp_obs.setFixedHeight(80)
+        self.inp_obs.setStyleSheet(f"background-color: {theme.BG_INPUT}; color: white; border: 1px solid {theme.ACCENT_COLOR};")
 
         form.addRow("Nro. Lote:", self.inp_lote); form.addRow("Cantidad (Piezas):", self.inp_qty)
         form.addRow("Largo (m):", self.inp_l); form.addRow("Ancho (cm):", self.inp_a); form.addRow("Espesor (cm):", self.inp_e)
-        form.addRow("Fecha Prod:", self.inp_date); form.addRow("Calidad:", self.inp_calidad); form.addRow("Obs:", self.inp_obs)
+        form.addRow("Fecha Prod:", self.inp_date); form.addRow("Calidad:", self.inp_calidad)
+        form.addRow("Obs (Editable):", self.inp_obs)
 
         scroll.setWidget(content); layout.addWidget(scroll)
+
+        # --- SECCIÓN RECUPERAR BAJA ---
+        if self.data.get('status') == 'BAJA':
+            rec_frame = QtWidgets.QFrame()
+            rec_frame.setStyleSheet("background-color: #3a1c1c; border-radius: 6px; padding: 10px; margin-top: 10px;")
+            rl = QtWidgets.QVBoxLayout(rec_frame)
+            
+            lbl_baja = QtWidgets.QLabel("⚠️ ESTE PRODUCTO ESTÁ DADO DE BAJA")
+            lbl_baja.setStyleSheet("color: #ff6b6b; font-weight: bold; font-size: 10pt;")
+            lbl_baja.setAlignment(QtCore.Qt.AlignCenter)
+            
+            self.btn_rec = QtWidgets.QPushButton("♻️ RECUPERAR (Reactivar Lote)")
+            self.btn_rec.setCursor(QtCore.Qt.PointingHandCursor)
+            self.btn_rec.setStyleSheet(f"background-color: {theme.BTN_SUCCESS}; color: black; font-weight: bold; padding: 8px;")
+            self.btn_rec.clicked.connect(self._activar_recuperacion)
+            
+            rl.addWidget(lbl_baja); rl.addWidget(self.btn_rec)
+            layout.addWidget(rec_frame)
+
+        # Botones Acción
         btn_box = QtWidgets.QHBoxLayout()
-        btn_save = QtWidgets.QPushButton("Guardar"); btn_save.clicked.connect(self.accept)
-        btn_save.setStyleSheet(f"background-color: {theme.BTN_SUCCESS}; color: black; font-weight: bold; padding: 8px;")
+        btn_save = QtWidgets.QPushButton("Guardar Cambios"); btn_save.clicked.connect(self.accept)
+        btn_save.setStyleSheet(f"background-color: {theme.BTN_PRIMARY}; color: white; font-weight: bold; padding: 8px;")
+        
         btn_cancel = QtWidgets.QPushButton("Cancelar"); btn_cancel.clicked.connect(self.reject)
         btn_cancel.setStyleSheet(f"background-color: {theme.BTN_DANGER}; color: white; padding: 8px;")
+        
         btn_box.addWidget(btn_cancel); btn_box.addWidget(btn_save); layout.addLayout(btn_box)
 
-    def _spinbox(self, val):
+    def _spinbox(self, val, locked=False):
         sb = QtWidgets.QDoubleSpinBox(); sb.setRange(0, 999999); sb.setValue(val)
-        sb.setStyleSheet(f"background-color: {theme.BG_INPUT}; color: white; padding: 4px;")
+        if locked:
+            sb.setReadOnly(True); sb.setButtonSymbols(QtWidgets.QAbstractSpinBox.NoButtons)
+            sb.setStyleSheet(f"background-color: {theme.BG_INPUT}; color: #888; border: 1px solid {theme.BORDER_COLOR}; padding: 4px;")
+        else:
+            sb.setStyleSheet(f"background-color: {theme.BG_INPUT}; color: white; padding: 4px;")
         return sb
 
+    def _activar_recuperacion(self):
+        self.recover_status = "AGOTADO" # Vuelve como activo pero con stock 0
+        self.btn_rec.setText("✅ SE RECUPERARÁ AL GUARDAR")
+        self.btn_rec.setEnabled(False)
+        self.inp_obs.appendPlainText(" [RECUPERADO DE BAJA]")
+
     def get_data(self):
-        return {
-            "id": self.data["id"], "nro_lote": self.inp_lote.text(), "quantity": self.inp_qty.value(),
-            "largo": self.inp_l.value(), "ancho": self.inp_a.value(), "espesor": self.inp_e.value(),
-            "prod_date": self.inp_date.date().toString("yyyy-MM-dd"), "quality": self.inp_calidad.currentText(), "obs": self.inp_obs.toPlainText()
+        d = {
+            "id": self.data["id"], 
+            "nro_lote": self.inp_lote.text(), 
+            "quantity": self.inp_qty.value(),
+            "largo": self.inp_l.value(), 
+            "ancho": self.inp_a.value(), 
+            "espesor": self.inp_e.value(),
+            "prod_date": self.inp_date.date().toString("yyyy-MM-dd"), 
+            "quality": self.inp_calidad.text(), 
+            "obs": self.inp_obs.toPlainText()
         }
+        if self.recover_status: d["status"] = self.recover_status
+        return d
 
 class InventarioScreen(QtWidgets.QWidget):
     def __init__(self, parent=None):
@@ -119,7 +172,7 @@ class InventarioScreen(QtWidgets.QWidget):
         self.chk_show_exhausted.setStyleSheet("color: white; font-weight: bold;")
         self.chk_show_exhausted.stateChanged.connect(self.refresh)
         
-        btn_edit = QtWidgets.QPushButton("✎ Editar"); btn_edit.clicked.connect(self._editar_producto)
+        btn_edit = QtWidgets.QPushButton("👁️ Ver / Editar"); btn_edit.clicked.connect(self._editar_producto)
         btn_del = QtWidgets.QPushButton("📉 Dar de Baja"); btn_del.clicked.connect(self._dar_baja_producto)
         btn_xls = QtWidgets.QPushButton("📊 Excel"); btn_xls.clicked.connect(lambda: self._exportar_excel("existencias"))
         
@@ -184,7 +237,6 @@ class InventarioScreen(QtWidgets.QWidget):
             mostrar_todo = self.chk_show_exhausted.isChecked()
             self.data_existencias = repo.list_inventory_rows(mostrar_agotados=mostrar_todo)
             self._llenar_existencias(self.data_existencias)
-            
             self.data_historial = repo.list_dispatches_history()
             self._llenar_historial(self.data_historial)
         except Exception as e:
@@ -193,45 +245,30 @@ class InventarioScreen(QtWidgets.QWidget):
     def _llenar_existencias(self, data):
         self.table_exist.setRowCount(0)
         for r in data:
-            row = self.table_exist.rowCount()
-            self.table_exist.insertRow(row)
+            row = self.table_exist.rowCount(); self.table_exist.insertRow(row)
             
-            tipo = str(r.get("product_type", ""))
-            qty = float(r.get("quantity", 0))
+            tipo = str(r.get("product_type", "")); qty = float(r.get("quantity", 0))
             factor = FACTORES_CONVERSION.get(tipo, 1)
             bultos = int(qty / factor) if factor else 0
             
             status = r.get("status")
-            if qty == 0: status = "AGOTADO/BAJA"
+            if qty == 0 and status != "BAJA": status = "AGOTADO"
 
-            vals = [
-                str(r.get("id")), r.get("sku"), r.get("nro_lote"), tipo,
-                f"{qty:.0f}", f"{bultos}", str(r.get("prod_date")), status,
-                str(r.get("largo")), str(r.get("ancho")), str(r.get("espesor")),
-                r.get("quality"), r.get("drying"), r.get("planing"), r.get("impregnated"), r.get("obs")
-            ]
+            vals = [str(r.get("id")), r.get("sku"), r.get("nro_lote"), tipo, f"{qty:.0f}", f"{bultos}", str(r.get("prod_date")), status, str(r.get("largo")), str(r.get("ancho")), str(r.get("espesor")), r.get("quality"), r.get("drying"), r.get("planing"), r.get("impregnated"), r.get("obs")]
             for i, v in enumerate(vals):
                 it = QtWidgets.QTableWidgetItem(str(v or ""))
                 if i==0: it.setData(QtCore.Qt.UserRole, r)
-                if qty == 0: it.setForeground(QtGui.QColor("gray"))
+                if status == "BAJA": it.setForeground(QtGui.QColor("#ff6b6b"))
+                elif qty == 0: it.setForeground(QtGui.QColor("gray"))
                 self.table_exist.setItem(row, i, it)
 
     def _llenar_historial(self, data):
         self.table_hist.setRowCount(0)
         for r in data:
-            row = self.table_hist.rowCount()
-            self.table_hist.insertRow(row)
-            
-            tipo = str(r.get("type", ""))
-            qty = float(r.get("quantity", 0))
-            factor = FACTORES_CONVERSION.get(tipo, 1)
-            bultos = int(qty / factor) if factor else 0
-            
-            vals = [
-                str(r.get("id")), str(r.get("date")), r.get("guide"),
-                r.get("client"), r.get("product"), r.get("lote"), r.get("sku"),
-                f"{qty:.0f}", f"{bultos}", r.get("obs")
-            ]
+            row = self.table_hist.rowCount(); self.table_hist.insertRow(row)
+            tipo = str(r.get("type", "")); qty = float(r.get("quantity", 0))
+            factor = FACTORES_CONVERSION.get(tipo, 1); bultos = int(qty / factor) if factor else 0
+            vals = [str(r.get("id")), str(r.get("date")), r.get("guide"), r.get("client"), r.get("product"), r.get("lote"), r.get("sku"), f"{qty:.0f}", f"{bultos}", r.get("obs")]
             for i, v in enumerate(vals):
                 self.table_hist.setItem(row, i, QtWidgets.QTableWidgetItem(str(v or "")))
 
@@ -250,21 +287,33 @@ class InventarioScreen(QtWidgets.QWidget):
         if row < 0: return None
         return self.table_exist.item(row, 0).data(QtCore.Qt.UserRole)
 
+    # --- CAMBIO: AÑADIDA JUSTIFICACIÓN DE BAJA ---
     def _dar_baja_producto(self):
         data = self._get_selected_existencia()
         if not data: return
+        
+        if data.get("status") == "BAJA":
+             QtWidgets.QMessageBox.warning(self, "Aviso", "Este producto ya está dado de BAJA.")
+             return
+        
         if float(data['quantity']) == 0:
             QtWidgets.QMessageBox.information(self, "Info", "Este producto ya está agotado.")
             return
 
-        if QtWidgets.QMessageBox.question(self, "Dar de Baja", 
-            f"¿Desea dar de baja el lote {data['nro_lote']}?\n\n"
-            "Esto pondrá la existencia en 0 y lo ocultará de la lista principal.",
-            QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No) == QtWidgets.QMessageBox.Yes:
-            
-            repo.delete_inventory(data['id'])
+        # Input Dialog para la razón
+        reason, ok = QtWidgets.QInputDialog.getText(
+            self, "Justificación de Baja", 
+            f"Está a punto de dar de baja el Lote {data['nro_lote']}.\n\n"
+            "Por favor, ingrese el motivo (Obligatorio):",
+            QtWidgets.QLineEdit.Normal
+        )
+
+        if ok and reason.strip():
+            repo.delete_inventory(data['id'], reason.strip())
             self.refresh()
-            QtWidgets.QMessageBox.information(self, "Listo", "Producto dado de baja.")
+            QtWidgets.QMessageBox.information(self, "Listo", "Producto dado de baja correctamente.")
+        elif ok:
+            QtWidgets.QMessageBox.warning(self, "Cancelado", "Debe ingresar un motivo para dar de baja.")
 
     def _editar_producto(self):
         data = self._get_selected_existencia()
@@ -274,73 +323,50 @@ class InventarioScreen(QtWidgets.QWidget):
             repo.update_inventory(dlg.get_data())
             self.refresh()
 
-    # --- NUEVA FUNCIÓN DE EXPORTACIÓN CON DISEÑO ---
     def _exportar_excel(self, tipo):
         try:
             import openpyxl
             from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
             from openpyxl.drawing.image import Image as XLImage
             from openpyxl.utils import get_column_letter
-        except ImportError:
-            QtWidgets.QMessageBox.warning(self, "Error", "Instale openpyxl y pillow")
-            return
+        except ImportError: QtWidgets.QMessageBox.warning(self, "Error", "Instale openpyxl"); return
 
         filename = "inventario.xlsx" if tipo == "existencias" else "historial.xlsx"
         path, _ = QtWidgets.QFileDialog.getSaveFileName(self, "Guardar", filename, "Excel (*.xlsx)")
         if not path: return
 
         try:
-            wb = openpyxl.Workbook()
-            ws = wb.active
-            ws.title = "Reporte"
-            
-            # Estilos
+            wb = openpyxl.Workbook(); ws = wb.active; ws.title = "Reporte"
             header_fill = PatternFill(start_color="1b1b26", end_color="1b1b26", fill_type="solid")
             header_font = Font(name="Arial", size=10, bold=True, color="FFFFFF")
             row_font = Font(name="Arial", size=10)
             thin_border = Border(left=Side(style='thin'), right=Side(style='thin'), top=Side(style='thin'), bottom=Side(style='thin'))
 
-            # Logo
             if os.path.exists("logo.png"):
-                try:
-                    img = XLImage("logo.png")
-                    img.height = 50; img.width = 50
-                    ws.add_image(img, "A1")
+                try: img = XLImage("logo.png"); img.height = 50; img.width = 50; ws.add_image(img, "A1")
                 except: pass
 
-            # Título
             ws.merge_cells("B2:E2")
             titulo = "EXISTENCIAS EN PATIO" if tipo == "existencias" else "HISTORIAL DE DESPACHOS"
-            ws["B2"] = titulo
-            ws["B2"].font = Font(size=14, bold=True)
+            ws["B2"] = titulo; ws["B2"].font = Font(size=14, bold=True)
             ws["B3"] = f"Fecha: {datetime.now().strftime('%d/%m/%Y %H:%M')}"
 
-            # Datos y Encabezados
-            start_row = 5
-            table_widget = self.table_exist if tipo == "existencias" else self.table_hist
+            start_row = 5; table_widget = self.table_exist if tipo == "existencias" else self.table_hist
             col_count = table_widget.columnCount()
 
-            # Header
             for c in range(col_count):
                 cell = ws.cell(row=start_row, column=c+1, value=table_widget.horizontalHeaderItem(c).text())
-                cell.fill = header_fill; cell.font = header_font
-                cell.alignment = Alignment(horizontal="center", vertical="center")
-                cell.border = thin_border
+                cell.fill = header_fill; cell.font = header_font; cell.alignment = Alignment(horizontal="center", vertical="center"); cell.border = thin_border
                 ws.column_dimensions[get_column_letter(c+1)].width = 18
 
-            # Filas
             for r in range(table_widget.rowCount()):
                 for c in range(col_count):
-                    it = table_widget.item(r, c)
-                    txt = it.text() if it else ""
+                    it = table_widget.item(r, c); txt = it.text() if it else ""
                     try: val = float(txt)
                     except: val = txt
-                    
                     cell = ws.cell(row=start_row + 1 + r, column=c+1, value=val)
                     cell.font = row_font; cell.border = thin_border
                     cell.alignment = Alignment(horizontal="left" if isinstance(val, str) else "right")
 
-            wb.save(path)
-            QtWidgets.QMessageBox.information(self, "Éxito", f"Reporte guardado:\n{path}")
-        except Exception as e:
-            QtWidgets.QMessageBox.critical(self, "Error", str(e))
+            wb.save(path); QtWidgets.QMessageBox.information(self, "Éxito", f"Reporte guardado:\n{path}")
+        except Exception as e: QtWidgets.QMessageBox.critical(self, "Error", str(e))

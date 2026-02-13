@@ -55,9 +55,24 @@ class ClienteDialog(QtWidgets.QDialog):
         self.inp_telefono.setValidator(QtGui.QRegularExpressionValidator(QtCore.QRegularExpression("[0-9-]*")))
         self.inp_telefono.textEdited.connect(self._format_phone)
 
-        # 4. Email
-        self.inp_email = self._make_input()
-        self.inp_email.setPlaceholderText("cliente@empresa.com")
+        # 4. Email (MODIFICADO: Separado en Usuario y Dominio)
+        email_container = QtWidgets.QWidget()
+        email_layout = QtWidgets.QHBoxLayout(email_container)
+        email_layout.setContentsMargins(0,0,0,0)
+        email_layout.setSpacing(5)
+
+        self.inp_email_user = self._make_input()
+        self.inp_email_user.setPlaceholderText("usuario")
+        
+        lbl_at = QtWidgets.QLabel("@")
+        lbl_at.setStyleSheet(f"color: {theme.TEXT_PRIMARY}; font-weight: bold; font-size: 11pt;")
+
+        self.inp_email_domain = self._make_input()
+        self.inp_email_domain.setPlaceholderText("dominio.com")
+
+        email_layout.addWidget(self.inp_email_user)
+        email_layout.addWidget(lbl_at)
+        email_layout.addWidget(self.inp_email_domain)
 
         # 5. Dirección
         self.inp_direccion = QtWidgets.QPlainTextEdit()
@@ -68,7 +83,7 @@ class ClienteDialog(QtWidgets.QDialog):
         form_layout.addRow("Nombre / Razón Social *:", self.inp_nombre)
         form_layout.addRow("Documento (C.I. / RIF) *:", doc_container)
         form_layout.addRow("Teléfono:", self.inp_telefono)
-        form_layout.addRow("Email:", self.inp_email)
+        form_layout.addRow("Email:", email_container) # Usamos el contenedor compuesto
         form_layout.addRow("Dirección:", self.inp_direccion)
 
         layout.addLayout(form_layout)
@@ -99,11 +114,21 @@ class ClienteDialog(QtWidgets.QDialog):
         return inp
 
     def _load_initial_data(self):
-        """Carga los datos y separa el prefijo (V/J) del número si existe."""
+        """Carga los datos y separa el prefijo (V/J) del número y el email en partes."""
         if not self.data: return
         
         self.inp_nombre.setText(self.data.get("name", ""))
-        self.inp_email.setText(self.data.get("email", ""))
+        
+        # Cargar Email dividido
+        email_full = self.data.get("email", "")
+        if "@" in email_full:
+            parts = email_full.split("@")
+            self.inp_email_user.setText(parts[0])
+            if len(parts) > 1:
+                self.inp_email_domain.setText(parts[1])
+        else:
+            self.inp_email_user.setText(email_full)
+
         self.inp_telefono.setText(self.data.get("phone", ""))
         self.inp_direccion.setPlainText(self.data.get("address", ""))
 
@@ -131,10 +156,8 @@ class ClienteDialog(QtWidgets.QDialog):
 
     def _format_phone(self, text):
         """Agrega el guion automáticamente después del 4to dígito."""
-        # Limpiamos cualquier caracter que no sea número (excepto el guion que ya pusimos)
         clean_text = text.replace("-", "")
         
-        # Si el usuario está borrando, no forzamos el formato
         if len(text) < len(self.inp_telefono.property("last_text") or ""):
             self.inp_telefono.setProperty("last_text", text)
             return
@@ -145,7 +168,6 @@ class ClienteDialog(QtWidgets.QDialog):
         
         if text != formatted:
             self.inp_telefono.setText(formatted)
-            # Mantener cursor al final (a veces salta al inicio al setear texto)
             self.inp_telefono.setCursorPosition(len(formatted))
         
         self.inp_telefono.setProperty("last_text", formatted)
@@ -167,12 +189,24 @@ class ClienteDialog(QtWidgets.QDialog):
             QtWidgets.QMessageBox.warning(self, "Error", f"Para RIF ({tipo_doc}), el número debe tener al menos 8 dígitos.")
             return
         
-        # 3. Validar Email (@)
-        email = self.inp_email.text().strip()
-        if email and "@" not in email:
-            QtWidgets.QMessageBox.warning(self, "Error", "El Correo Electrónico debe contener una arroba '@'.")
-            self.inp_email.setFocus()
-            return
+        # 3. Validar Email (Usuario + @ + Dominio)
+        user_part = self.inp_email_user.text().strip()
+        domain_part = self.inp_email_domain.text().strip()
+        
+        # Si escribió algo en usuario o dominio, exigimos que esté completo
+        if user_part or domain_part:
+            if not user_part:
+                QtWidgets.QMessageBox.warning(self, "Error", "Falta la parte del usuario en el correo.")
+                self.inp_email_user.setFocus()
+                return
+            if not domain_part:
+                QtWidgets.QMessageBox.warning(self, "Error", "Falta el dominio del correo (ej: gmail.com).")
+                self.inp_email_domain.setFocus()
+                return
+            if "." not in domain_part:
+                QtWidgets.QMessageBox.warning(self, "Error", "El dominio parece inválido (debe tener un punto, ej: .com).")
+                self.inp_email_domain.setFocus()
+                return
 
         self.accept()
 
@@ -180,11 +214,18 @@ class ClienteDialog(QtWidgets.QDialog):
         # Concatenamos Tipo + Guion + Numero para guardar en BD
         full_doc = f"{self.cb_doc_type.currentText()}-{self.inp_cedula.text().strip()}"
         
+        # Concatenamos Email
+        email_full = ""
+        user_part = self.inp_email_user.text().strip()
+        domain_part = self.inp_email_domain.text().strip()
+        if user_part and domain_part:
+            email_full = f"{user_part}@{domain_part}"
+        
         return {
             "nombre": self.inp_nombre.text().strip(),
             "cedula_rif": full_doc,
             "telefono": self.inp_telefono.text().strip(),
-            "email": self.inp_email.text().strip(),
+            "email": email_full,
             "direccion": self.inp_direccion.toPlainText().strip()
         }
 

@@ -99,27 +99,52 @@ def list_inventory_rows(mostrar_agotados=False):
                 "product_type": r[14], "drying": r[15], "planing": r[16], "impregnated": r[17]
             })
         return result
-
-def delete_inventory(inventory_id: int):
+    
+# --- CAMBIO: AÑADIDO PARÁMETRO 'REASON' ---
+def delete_inventory(inventory_id: int, reason: str = ""):
     with SessionLocal() as session:
         inv = session.get(Inventory, inventory_id)
         if inv and inv.quantity > 0:
             qty_to_remove = inv.quantity
-            mv = Movement(inventory_id=inv.id, product_id=inv.product_id, change_quantity=-qty_to_remove, movement_type="OUT", reference="BAJA MANUAL", notes="Eliminación lógica")
+            mv = Movement(
+                inventory_id=inv.id, product_id=inv.product_id, 
+                change_quantity=-qty_to_remove, movement_type="OUT", 
+                reference="BAJA MANUAL", notes=f"Baja: {reason}"
+            )
             session.add(mv)
-            inv.quantity = 0; inv.status = "BAJA"
+            inv.quantity = 0
+            inv.status = "BAJA"
+            # Guardamos la justificación en las observaciones
+            current_obs = inv.obs or ""
+            inv.obs = f"{current_obs} | [BAJA: {reason}]".strip()
             session.commit()
         elif inv:
-            inv.status = "BAJA"; session.commit()
+            inv.status = "BAJA"
+            current_obs = inv.obs or ""
+            inv.obs = f"{current_obs} | [BAJA: {reason}]".strip()
+            session.commit()
 
+# --- CAMBIO: PERMITIR CAMBIAR STATUS ---
 def update_inventory(data: dict):
     with SessionLocal() as session:
         inv = session.get(Inventory, data["id"])
         if not inv: raise ValueError("No encontrado")
-        inv.nro_lote = data.get("nro_lote"); inv.quantity = data.get("quantity")
-        inv.largo = data.get("largo"); inv.ancho = data.get("ancho"); inv.espesor = data.get("espesor")
-        inv.piezas = data.get("piezas"); inv.prod_date = _parse_date(data.get("prod_date"))
-        inv.quality = data.get("quality"); inv.obs = data.get("obs")
+        
+        # Estos campos se actualizan pero desde la UI vendrán igual si están bloqueados
+        inv.nro_lote = data.get("nro_lote")
+        inv.quantity = data.get("quantity")
+        inv.largo = data.get("largo")
+        inv.ancho = data.get("ancho")
+        inv.espesor = data.get("espesor")
+        inv.piezas = data.get("piezas")
+        inv.prod_date = _parse_date(data.get("prod_date"))
+        inv.quality = data.get("quality")
+        inv.obs = data.get("obs") # Este sí cambia
+        
+        # Si se envía un status (recuperación), lo aplicamos
+        if "status" in data:
+            inv.status = data["status"]
+            
         session.commit()
 
 # ---------- DESPACHOS Y SALIDAS ----------
