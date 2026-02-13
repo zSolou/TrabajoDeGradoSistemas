@@ -1,6 +1,8 @@
 from PySide6 import QtCore, QtWidgets, QtGui
 from core import repo, theme
 import re
+import os
+from datetime import datetime
 
 class ClienteDialog(QtWidgets.QDialog):
     """Diálogo para Crear o Editar Cliente con Validaciones Venezolanas"""
@@ -30,32 +32,29 @@ class ClienteDialog(QtWidgets.QDialog):
         doc_layout.setSpacing(5)
 
         self.cb_doc_type = QtWidgets.QComboBox()
-        self.cb_doc_type.addItems(["V", "J", "E", "G"]) # Agregamos E y G por si acaso
+        self.cb_doc_type.addItems(["V", "J", "E", "G"]) 
         self.cb_doc_type.setFixedWidth(60)
         self.cb_doc_type.setStyleSheet(f"""
             QComboBox {{ background-color: {theme.BG_INPUT}; border: 1px solid {theme.BORDER_COLOR}; padding: 5px; border-radius: 4px; color: white; }}
             QComboBox::drop-down {{ border: none; }}
         """)
-        # Conectar cambio de tipo para ajustar validaciones
         self.cb_doc_type.currentTextChanged.connect(self._update_doc_constraints)
 
         self.inp_cedula = self._make_input()
         self.inp_cedula.setPlaceholderText("12345678")
-        # Validador: Solo números
         self.inp_cedula.setValidator(QtGui.QRegularExpressionValidator(QtCore.QRegularExpression("[0-9]*")))
 
         doc_layout.addWidget(self.cb_doc_type)
         doc_layout.addWidget(self.inp_cedula)
 
-        # 3. Teléfono (con auto-formato)
+        # 3. Teléfono
         self.inp_telefono = self._make_input()
         self.inp_telefono.setPlaceholderText("0414-1234567")
-        self.inp_telefono.setMaxLength(12) # 4 nums + 1 guion + 7 nums
-        # Solo números y guiones
+        self.inp_telefono.setMaxLength(12) 
         self.inp_telefono.setValidator(QtGui.QRegularExpressionValidator(QtCore.QRegularExpression("[0-9-]*")))
         self.inp_telefono.textEdited.connect(self._format_phone)
 
-        # 4. Email (MODIFICADO: Separado en Usuario y Dominio)
+        # 4. Email (Usuario + @ + Dominio)
         email_container = QtWidgets.QWidget()
         email_layout = QtWidgets.QHBoxLayout(email_container)
         email_layout.setContentsMargins(0,0,0,0)
@@ -79,11 +78,10 @@ class ClienteDialog(QtWidgets.QDialog):
         self.inp_direccion.setFixedHeight(60)
         self.inp_direccion.setStyleSheet(f"background-color: {theme.BG_INPUT}; border: 1px solid {theme.BORDER_COLOR}; border-radius: 4px;")
 
-        # Agregar filas al formulario
         form_layout.addRow("Nombre / Razón Social *:", self.inp_nombre)
         form_layout.addRow("Documento (C.I. / RIF) *:", doc_container)
         form_layout.addRow("Teléfono:", self.inp_telefono)
-        form_layout.addRow("Email:", email_container) # Usamos el contenedor compuesto
+        form_layout.addRow("Email:", email_container)
         form_layout.addRow("Dirección:", self.inp_direccion)
 
         layout.addLayout(form_layout)
@@ -105,7 +103,6 @@ class ClienteDialog(QtWidgets.QDialog):
         btn_layout.addWidget(btn_save)
         layout.addLayout(btn_layout)
 
-        # Inicializar restricciones
         self._update_doc_constraints(self.cb_doc_type.currentText())
 
     def _make_input(self):
@@ -114,25 +111,21 @@ class ClienteDialog(QtWidgets.QDialog):
         return inp
 
     def _load_initial_data(self):
-        """Carga los datos y separa el prefijo (V/J) del número y el email en partes."""
         if not self.data: return
         
         self.inp_nombre.setText(self.data.get("name", ""))
         
-        # Cargar Email dividido
         email_full = self.data.get("email", "")
         if "@" in email_full:
             parts = email_full.split("@")
             self.inp_email_user.setText(parts[0])
-            if len(parts) > 1:
-                self.inp_email_domain.setText(parts[1])
+            if len(parts) > 1: self.inp_email_domain.setText(parts[1])
         else:
             self.inp_email_user.setText(email_full)
 
         self.inp_telefono.setText(self.data.get("phone", ""))
         self.inp_direccion.setPlainText(self.data.get("address", ""))
 
-        # Lógica para separar V-123456
         doc_full = self.data.get("document_id", "")
         if "-" in doc_full:
             parts = doc_full.split("-")
@@ -140,40 +133,32 @@ class ClienteDialog(QtWidgets.QDialog):
                 self.cb_doc_type.setCurrentText(parts[0])
                 self.inp_cedula.setText(parts[1])
             else:
-                self.inp_cedula.setText(doc_full) # Fallback
+                self.inp_cedula.setText(doc_full)
         else:
             self.inp_cedula.setText(doc_full)
 
     def _update_doc_constraints(self, tipo):
-        """Ajusta el MaxLength según sea V o J"""
-        self.inp_cedula.clear() # Limpiar para evitar inconsistencias visuales
+        self.inp_cedula.clear()
         if tipo == "V" or tipo == "E":
             self.inp_cedula.setMaxLength(8)
             self.inp_cedula.setPlaceholderText("Máx 8 dígitos")
-        else: # J o G
+        else: 
             self.inp_cedula.setMaxLength(10)
             self.inp_cedula.setPlaceholderText("Máx 10 dígitos")
 
     def _format_phone(self, text):
-        """Agrega el guion automáticamente después del 4to dígito."""
         clean_text = text.replace("-", "")
-        
         if len(text) < len(self.inp_telefono.property("last_text") or ""):
             self.inp_telefono.setProperty("last_text", text)
             return
-
         formatted = clean_text
-        if len(clean_text) > 4:
-            formatted = clean_text[:4] + "-" + clean_text[4:]
-        
+        if len(clean_text) > 4: formatted = clean_text[:4] + "-" + clean_text[4:]
         if text != formatted:
             self.inp_telefono.setText(formatted)
             self.inp_telefono.setCursorPosition(len(formatted))
-        
         self.inp_telefono.setProperty("last_text", formatted)
 
     def _validate_and_accept(self):
-        # 1. Validar Campos Vacíos
         if not self.inp_nombre.text().strip():
             QtWidgets.QMessageBox.warning(self, "Error", "El Nombre es obligatorio.")
             return
@@ -183,43 +168,33 @@ class ClienteDialog(QtWidgets.QDialog):
             QtWidgets.QMessageBox.warning(self, "Error", "El Documento es obligatorio.")
             return
 
-        # 2. Validar Longitud Documento
         tipo_doc = self.cb_doc_type.currentText()
         if tipo_doc in ["J", "G"] and len(cedula) < 8:
             QtWidgets.QMessageBox.warning(self, "Error", f"Para RIF ({tipo_doc}), el número debe tener al menos 8 dígitos.")
             return
         
-        # 3. Validar Email (Usuario + @ + Dominio)
         user_part = self.inp_email_user.text().strip()
         domain_part = self.inp_email_domain.text().strip()
         
-        # Si escribió algo en usuario o dominio, exigimos que esté completo
         if user_part or domain_part:
             if not user_part:
-                QtWidgets.QMessageBox.warning(self, "Error", "Falta la parte del usuario en el correo.")
-                self.inp_email_user.setFocus()
-                return
+                QtWidgets.QMessageBox.warning(self, "Error", "Falta el usuario del correo.")
+                self.inp_email_user.setFocus(); return
             if not domain_part:
-                QtWidgets.QMessageBox.warning(self, "Error", "Falta el dominio del correo (ej: gmail.com).")
-                self.inp_email_domain.setFocus()
-                return
+                QtWidgets.QMessageBox.warning(self, "Error", "Falta el dominio del correo.")
+                self.inp_email_domain.setFocus(); return
             if "." not in domain_part:
-                QtWidgets.QMessageBox.warning(self, "Error", "El dominio parece inválido (debe tener un punto, ej: .com).")
-                self.inp_email_domain.setFocus()
-                return
+                QtWidgets.QMessageBox.warning(self, "Error", "El dominio debe tener un punto (ej: .com).")
+                self.inp_email_domain.setFocus(); return
 
         self.accept()
 
     def get_data(self):
-        # Concatenamos Tipo + Guion + Numero para guardar en BD
         full_doc = f"{self.cb_doc_type.currentText()}-{self.inp_cedula.text().strip()}"
-        
-        # Concatenamos Email
         email_full = ""
-        user_part = self.inp_email_user.text().strip()
-        domain_part = self.inp_email_domain.text().strip()
-        if user_part and domain_part:
-            email_full = f"{user_part}@{domain_part}"
+        u = self.inp_email_user.text().strip()
+        d = self.inp_email_domain.text().strip()
+        if u and d: email_full = f"{u}@{d}"
         
         return {
             "nombre": self.inp_nombre.text().strip(),
@@ -248,13 +223,11 @@ class ClientesScreen(QtWidgets.QWidget):
         header.addWidget(lbl)
         header.addStretch()
         
-        # Checkbox
         self.chk_ver_inactivos = QtWidgets.QCheckBox("Ver Desactivados")
         self.chk_ver_inactivos.setStyleSheet(f"color: {theme.TEXT_SECONDARY}; font-weight: bold;")
         self.chk_ver_inactivos.stateChanged.connect(self.refresh)
         header.addWidget(self.chk_ver_inactivos)
         
-        # Botón Nuevo
         btn_nuevo = QtWidgets.QPushButton("+ Nuevo Cliente")
         btn_nuevo.setCursor(QtCore.Qt.PointingHandCursor)
         btn_nuevo.setStyleSheet(f"""
@@ -276,8 +249,16 @@ class ClientesScreen(QtWidgets.QWidget):
         self.btn_toggle.setCursor(QtCore.Qt.PointingHandCursor)
         self.btn_toggle.clicked.connect(self._toggle_activo)
         
+        # --- NUEVO BOTÓN: EXPORTAR ---
+        btn_xls = QtWidgets.QPushButton("📊 Exportar Excel")
+        btn_xls.setCursor(QtCore.Qt.PointingHandCursor)
+        btn_xls.setStyleSheet("background-color: #217346; color: white; border-radius: 4px; padding: 6px 12px; font-weight: bold;")
+        btn_xls.clicked.connect(self._exportar_excel)
+        # -----------------------------
+
         actions_layout.addWidget(btn_edit)
         actions_layout.addWidget(self.btn_toggle)
+        actions_layout.addWidget(btn_xls) # Añadido al layout
         actions_layout.addStretch()
         layout.addLayout(actions_layout)
 
@@ -313,24 +294,15 @@ class ClientesScreen(QtWidgets.QWidget):
                 is_active = getattr(c, "is_active", True)
                 estado_str = "ACTIVO" if is_active else "INACTIVO"
                 
-                # Items
-                items = [
-                    str(c.id), c.name, c.document_id, 
-                    c.phone or "", c.email or "", estado_str
-                ]
+                items = [str(c.id), c.name, c.document_id, c.phone or "", c.email or "", estado_str]
                 
                 for i, val in enumerate(items):
                     it = QtWidgets.QTableWidgetItem(val)
-                    if not is_active:
-                        it.setForeground(QtGui.QColor("#ff6b6b")) 
-                    
-                    if i == 0:
-                        it.setData(QtCore.Qt.UserRole, c)
-                        
+                    if not is_active: it.setForeground(QtGui.QColor("#ff6b6b")) 
+                    if i == 0: it.setData(QtCore.Qt.UserRole, c)
                     self.table.setItem(r, i, it)
                     
-        except Exception as e:
-            print(f"Error clientes: {e}")
+        except Exception as e: print(f"Error clientes: {e}")
 
     def _get_selected_client(self):
         row = self.table.currentRow()
@@ -363,21 +335,12 @@ class ClientesScreen(QtWidgets.QWidget):
                 repo.create_client(data)
                 QtWidgets.QMessageBox.information(self, "Éxito", "Cliente registrado correctamente.")
                 self.refresh()
-            except Exception as e:
-                QtWidgets.QMessageBox.critical(self, "Error", str(e))
+            except Exception as e: QtWidgets.QMessageBox.critical(self, "Error", str(e))
 
     def _editar_cliente(self):
         client = self._get_selected_client()
         if not client: return
-        
-        data_dict = {
-            "name": client.name,
-            "document_id": client.document_id,
-            "phone": client.phone,
-            "email": client.email,
-            "address": client.address
-        }
-        
+        data_dict = {"name": client.name, "document_id": client.document_id, "phone": client.phone, "email": client.email, "address": client.address}
         dialog = ClienteDialog(data=data_dict, parent=self)
         if dialog.exec_() == QtWidgets.QDialog.Accepted:
             new_data = dialog.get_data()
@@ -385,26 +348,78 @@ class ClientesScreen(QtWidgets.QWidget):
                 repo.update_client(client.id, new_data)
                 QtWidgets.QMessageBox.information(self, "Éxito", "Cliente actualizado.")
                 self.refresh()
-            except Exception as e:
-                QtWidgets.QMessageBox.critical(self, "Error", str(e))
+            except Exception as e: QtWidgets.QMessageBox.critical(self, "Error", str(e))
 
     def _toggle_activo(self):
         client = self._get_selected_client()
         if not client: return
-        
         is_active = getattr(client, "is_active", True)
         action = "desactivar" if is_active else "reactivar"
-        
-        confirm = QtWidgets.QMessageBox.question(
-            self, f"Confirmar {action}",
-            f"¿Desea {action} al cliente '{client.name}'?",
-            QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No
-        )
-        
+        confirm = QtWidgets.QMessageBox.question(self, f"Confirmar {action}", f"¿Desea {action} al cliente '{client.name}'?", QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No)
         if confirm == QtWidgets.QMessageBox.Yes:
             try:
                 repo.toggle_client_active(client.id, not is_active)
-                self.refresh()
-                self._update_buttons()
-            except Exception as e:
-                QtWidgets.QMessageBox.critical(self, "Error", str(e))
+                self.refresh(); self._update_buttons()
+            except Exception as e: QtWidgets.QMessageBox.critical(self, "Error", str(e))
+
+    # --- FUNCIÓN DE EXPORTACIÓN ---
+    def _exportar_excel(self):
+        try:
+            import openpyxl
+            from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+            from openpyxl.drawing.image import Image as XLImage
+            from openpyxl.utils import get_column_letter
+        except ImportError:
+            QtWidgets.QMessageBox.warning(self, "Error", "Instale openpyxl para exportar.")
+            return
+
+        path, _ = QtWidgets.QFileDialog.getSaveFileName(self, "Exportar Clientes", "clientes.xlsx", "Excel (*.xlsx)")
+        if not path: return
+
+        try:
+            wb = openpyxl.Workbook(); ws = wb.active; ws.title = "Cartera Clientes"
+            
+            # Estilos
+            header_fill = PatternFill(start_color="1b1b26", end_color="1b1b26", fill_type="solid")
+            header_font = Font(name="Arial", size=10, bold=True, color="FFFFFF")
+            row_font = Font(name="Arial", size=10)
+            thin_border = Border(left=Side(style='thin'), right=Side(style='thin'), top=Side(style='thin'), bottom=Side(style='thin'))
+
+            # Logo
+            if os.path.exists("logo.png"):
+                try: img = XLImage("logo.png"); img.height = 50; img.width = 50; ws.add_image(img, "A1")
+                except: pass
+
+            # Título
+            ws.merge_cells("B2:E2")
+            ws["B2"] = "CARTERA DE CLIENTES REGISTRADOS"
+            ws["B2"].font = Font(size=14, bold=True)
+            ws["B3"] = f"Generado: {datetime.now().strftime('%d/%m/%Y')}"
+
+            start_row = 5
+            headers = ["ID", "Nombre / Razón Social", "Documento", "Teléfono", "Email", "Estado"]
+            
+            # Escribir Encabezados
+            for i, h in enumerate(headers):
+                c = ws.cell(row=start_row, column=i+1, value=h)
+                c.fill = header_fill; c.font = header_font; c.alignment = Alignment(horizontal="center"); c.border = thin_border
+                ws.column_dimensions[get_column_letter(i+1)].width = 25
+
+            # Escribir Filas
+            for r in range(self.table.rowCount()):
+                for c in range(len(headers)):
+                    it = self.table.item(r, c)
+                    val = it.text() if it else ""
+                    # Convertir ID a número
+                    if c == 0: 
+                        try: val = int(val)
+                        except: pass
+                    
+                    cell = ws.cell(row=start_row + 1 + r, column=c+1, value=val)
+                    cell.font = row_font; cell.border = thin_border
+                    cell.alignment = Alignment(horizontal="left")
+
+            wb.save(path)
+            QtWidgets.QMessageBox.information(self, "Éxito", f"Reporte guardado en:\n{path}")
+        except Exception as e:
+            QtWidgets.QMessageBox.critical(self, "Error", f"Fallo al exportar: {e}")

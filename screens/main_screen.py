@@ -44,10 +44,6 @@ class MainScreen(QtWidgets.QWidget):
         self.btn_res = self._create_nav_button("💾 Respaldo")
         self.btn_man = self._create_nav_button("❓ Manual")
         
-        # Logout
-        self.btn_logout = QtWidgets.QPushButton("Cerrar Sesión")
-        self.btn_logout.setCursor(QtCore.Qt.PointingHandCursor)
-        self.btn_logout.setStyleSheet(f"background-color: {theme.BTN_DANGER}; color: white; border-radius: 5px; padding: 10px; font-weight: bold;")
         
         # Añadir al menú
         menu_layout.addWidget(self.btn_inv)
@@ -58,7 +54,6 @@ class MainScreen(QtWidgets.QWidget):
         menu_layout.addWidget(self.btn_res)
         menu_layout.addWidget(self.btn_man)
         menu_layout.addStretch()
-        menu_layout.addWidget(self.btn_logout)
 
         main_layout.addWidget(self.side_menu)
 

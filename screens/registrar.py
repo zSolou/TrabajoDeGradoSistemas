@@ -297,7 +297,7 @@ class RegistrarForm(QtWidgets.QWidget):
         de.setDisplayFormat("dd/MM/yyyy")
         
         # 1. Fecha Mínima (Año 2000)
-        min_date = QtCore.QDate(2000, 1, 1)
+        min_date = QtCore.QDate(2026, 1, 1)
         de.setMinimumDate(min_date)
         
         # 2. Texto "Placeholder" cuando está en la fecha mínima
