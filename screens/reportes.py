@@ -186,7 +186,7 @@ class ReportesScreen(QtWidgets.QWidget):
                 self.table_prod.setItem(row, 3, QtWidgets.QTableWidgetItem(str(tipo)))
                 self.table_prod.setItem(row, 4, QtWidgets.QTableWidgetItem(str(r.get('quality', '-'))))
                 self.table_prod.setItem(row, 5, QtWidgets.QTableWidgetItem(f"{pzas:.0f}"))
-                self.table_prod.setItem(row, 6, QtWidgets.QTableWidgetItem(f"{pzas/factor:.1f}" if factor else "0"))
+                self.table_prod.setItem(row, 6, QtWidgets.QTableWidgetItem(f"{pzas/factor:.0f}" if factor else "0"))
                 self.table_prod.setItem(row, 7, QtWidgets.QTableWidgetItem(str(r['status'])))
                 stats[tipo] = stats.get(tipo, 0) + pzas
             if MATPLOTLIB_AVAILABLE: self._update_chart(self.chart_prod, stats, "Producción (Piezas)")

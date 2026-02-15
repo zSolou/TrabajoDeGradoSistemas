@@ -112,9 +112,9 @@ class LoginScreen(QtWidgets.QWidget):
         card_layout.addWidget(self.btn_login)
 
         # 5. PIE DE PÁGINA (Versión)
-        lbl_ver = QtWidgets.QLabel("Sistema de Gestión")
+        lbl_ver = QtWidgets.QLabel("De no recordar sus credenciales, contacta al administrador:\nCorreo: angeldapesa@gmail.com")
         lbl_ver.setAlignment(QtCore.Qt.AlignCenter)
-        lbl_ver.setStyleSheet("color: #555; font-size: 9pt; margin-top: 10px;")
+        lbl_ver.setStyleSheet("color: #ADADAD; font-size: 8pt; margin-top: 10px;")
         card_layout.addWidget(lbl_ver)
 
         # Añadir tarjeta al centro
