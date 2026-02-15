@@ -1,6 +1,6 @@
 from PySide6 import QtCore, QtWidgets, QtGui
 from datetime import date, timedelta
-from core import repo, theme
+from core import repo, theme, utils # Importamos utils para PDF
 import sys
 
 # Factores
@@ -148,6 +148,7 @@ class ReportesScreen(QtWidgets.QWidget):
 
         spl = QtWidgets.QSplitter(QtCore.Qt.Horizontal)
         self.table_prod = QtWidgets.QTableWidget()
+        # --- SIN ID ---
         self.table_prod.setColumnCount(8); self.table_prod.setHorizontalHeaderLabels(["Fecha", "Lote", "SKU", "Producto", "Calidad", "Cant.", "Bultos", "Estado"])
         self._style_table(self.table_prod)
         spl.addWidget(self.table_prod)
@@ -157,17 +158,26 @@ class ReportesScreen(QtWidgets.QWidget):
             spl.addWidget(self.chart_prod)
         l.addWidget(spl)
 
-        btn_xls = QtWidgets.QPushButton("📊 Exportar Excel"); btn_xls.clicked.connect(lambda: exportar_tabla_excel(self, self.table_prod, "produccion"))
-        btn_xls.setStyleSheet("background-color: #217346; color: white; padding: 8px; font-weight: bold;"); l.addWidget(btn_xls)
+        # Botones Exportar
+        btn_layout = QtWidgets.QHBoxLayout()
+        btn_xls = QtWidgets.QPushButton("📊 Excel"); btn_xls.clicked.connect(lambda: exportar_tabla_excel(self, self.table_prod, "produccion"))
+        btn_xls.setStyleSheet("background-color: #217346; color: white; padding: 8px; font-weight: bold; border-radius: 4px;")
+        
+        # --- BOTÓN PDF ---
+        btn_pdf = QtWidgets.QPushButton("📄 PDF")
+        btn_pdf.clicked.connect(lambda: utils.exportar_tabla_pdf(self, self.table_prod, "REPORTE DE PRODUCCIÓN", "produccion"))
+        btn_pdf.setStyleSheet("background-color: #d32f2f; color: white; padding: 8px; font-weight: bold; border-radius: 4px;")
+        # -----------------
+
+        btn_layout.addWidget(btn_xls); btn_layout.addWidget(btn_pdf)
+        l.addLayout(btn_layout)
 
     def _search_prod(self):
         d1 = self.d1_prod.date().toPython(); d2 = self.d2_prod.date().toPython()
         
-        # --- VALIDACIÓN DE FECHAS ---
         if d1 > d2:
             QtWidgets.QMessageBox.warning(self, "Fecha Inválida", "La fecha 'Desde' no puede ser mayor que 'Hasta'.")
             return
-        # ----------------------------
 
         pname = self.cb_prod_filter.currentText(); pname = "" if "Todos" in pname else pname
         qual = self.cb_qual_filter.currentText()
@@ -186,7 +196,7 @@ class ReportesScreen(QtWidgets.QWidget):
                 self.table_prod.setItem(row, 3, QtWidgets.QTableWidgetItem(str(tipo)))
                 self.table_prod.setItem(row, 4, QtWidgets.QTableWidgetItem(str(r.get('quality', '-'))))
                 self.table_prod.setItem(row, 5, QtWidgets.QTableWidgetItem(f"{pzas:.0f}"))
-                self.table_prod.setItem(row, 6, QtWidgets.QTableWidgetItem(f"{pzas/factor:.0f}" if factor else "0"))
+                self.table_prod.setItem(row, 6, QtWidgets.QTableWidgetItem(f"{pzas/factor:.1f}" if factor else "0"))
                 self.table_prod.setItem(row, 7, QtWidgets.QTableWidgetItem(str(r['status'])))
                 stats[tipo] = stats.get(tipo, 0) + pzas
             if MATPLOTLIB_AVAILABLE: self._update_chart(self.chart_prod, stats, "Producción (Piezas)")
@@ -231,6 +241,7 @@ class ReportesScreen(QtWidgets.QWidget):
 
         spl = QtWidgets.QSplitter(QtCore.Qt.Horizontal)
         self.table_disp = QtWidgets.QTableWidget()
+        # --- SIN ID ---
         self.table_disp.setColumnCount(9); self.table_disp.setHorizontalHeaderLabels(["Fecha", "Guía", "Cliente", "Producto", "Lote", "SKU", "Cant.", "Bultos", "Obs"])
         self._style_table(self.table_disp)
         spl.addWidget(self.table_disp)
@@ -240,17 +251,26 @@ class ReportesScreen(QtWidgets.QWidget):
             spl.addWidget(self.chart_disp)
         l.addWidget(spl)
 
+        # Botones Exportar
+        btn_layout = QtWidgets.QHBoxLayout()
         btn_xls = QtWidgets.QPushButton("📊 Exportar Excel"); btn_xls.clicked.connect(lambda: exportar_tabla_excel(self, self.table_disp, "despachos"))
-        btn_xls.setStyleSheet("background-color: #217346; color: white; padding: 8px; font-weight: bold;"); l.addWidget(btn_xls)
+        btn_xls.setStyleSheet("background-color: #217346; color: white; padding: 8px; font-weight: bold; border-radius: 4px;")
+        
+        # --- BOTÓN PDF ---
+        btn_pdf = QtWidgets.QPushButton("📄 PDF")
+        btn_pdf.clicked.connect(lambda: utils.exportar_tabla_pdf(self, self.table_disp, "REPORTE DE DESPACHOS", "despachos"))
+        btn_pdf.setStyleSheet("background-color: #d32f2f; color: white; padding: 8px; font-weight: bold; border-radius: 4px;")
+        # -----------------
+
+        btn_layout.addWidget(btn_xls); btn_layout.addWidget(btn_pdf)
+        l.addLayout(btn_layout)
 
     def _search_disp(self):
         d1 = self.d1_disp.date().toPython(); d2 = self.d2_disp.date().toPython()
         
-        # --- VALIDACIÓN ---
         if d1 > d2:
             QtWidgets.QMessageBox.warning(self, "Fecha Inválida", "La fecha 'Desde' no puede ser mayor que 'Hasta'.")
             return
-        # ------------------
 
         cid = self.cb_client.currentData()
         pname = self.cb_disp_prod.currentText(); pname = "" if "Todos" in pname else pname
@@ -283,8 +303,8 @@ class ReportesScreen(QtWidgets.QWidget):
         l = QtWidgets.QVBoxLayout(parent)
         h = QtWidgets.QHBoxLayout(); h.setSpacing(15)
         
-        self.s_l1 = QtWidgets.QSpinBox(); self.s_l1.setRange(0, 999); self.s_l1.setPrefix("Lote ")
-        self.s_l2 = QtWidgets.QSpinBox(); self.s_l2.setRange(0, 999); self.s_l2.setPrefix("Lote ")
+        self.s_l1 = QtWidgets.QSpinBox(); self.s_l1.setRange(0, 999999); self.s_l1.setPrefix("Lote ")
+        self.s_l2 = QtWidgets.QSpinBox(); self.s_l2.setRange(0, 999999); self.s_l2.setPrefix("Lote ")
         self._estilizar_input(self.s_l1); self._estilizar_input(self.s_l2)
 
         self.cb_lote_prod = QtWidgets.QComboBox(); self.cb_lote_prod.addItems(["Todos los Productos", "Tablas", "Machihembrado", "Tablones", "Paletas"])
@@ -296,21 +316,29 @@ class ReportesScreen(QtWidgets.QWidget):
         
         h.addWidget(QtWidgets.QLabel("Desde:")); h.addWidget(self.s_l1)
         h.addWidget(QtWidgets.QLabel("Hasta:")); h.addWidget(self.s_l2)
-        h.addWidget(self.cb_lote_prod); h.addWidget(self.chk_agotados); h.addWidget(btn); h.addStretch()
+        h.addWidget(self.cb_lote_prod); h.addWidget(self.chk_agotados); h.addWidget(btn)
+        
+        # --- BOTÓN PDF ---
+        btn_pdf = QtWidgets.QPushButton("📄 PDF")
+        btn_pdf.clicked.connect(lambda: utils.exportar_tabla_pdf(self, self.table_lote, "REPORTE POR LOTES", "lotes"))
+        btn_pdf.setStyleSheet("background-color: #d32f2f; color: white; padding: 6px 15px; font-weight: bold; border-radius: 4px;")
+        h.addWidget(btn_pdf)
+        # -----------------
+        
+        h.addStretch()
         l.addLayout(h)
 
         self.table_lote = QtWidgets.QTableWidget()
+        # --- SIN ID ---
         self.table_lote.setColumnCount(7); self.table_lote.setHorizontalHeaderLabels(["Lote", "SKU", "Producto", "F. Prod", "Stock (Pzas)", "Bultos", "Estado"])
         self._style_table(self.table_lote); l.addWidget(self.table_lote)
 
     def _search_lotes(self):
         l1 = self.s_l1.value(); l2 = self.s_l2.value()
         
-        # --- VALIDACIÓN DE RANGO ---
         if l1 > l2: 
             QtWidgets.QMessageBox.warning(self, "Error", "El lote inicial no puede ser mayor al final.")
             return
-        # ---------------------------
 
         incluir = self.chk_agotados.isChecked()
         pname = self.cb_lote_prod.currentText(); pname = None if "Todos" in pname else pname

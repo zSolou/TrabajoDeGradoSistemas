@@ -100,28 +100,24 @@ def list_inventory_rows(mostrar_agotados=False):
             })
         return result
     
-# --- CAMBIO: AÑADIDO PARÁMETRO 'REASON' ---
+    #Cambios realizados:
+    
 def delete_inventory(inventory_id: int, reason: str = ""):
+    """
+    Baja Lógica: Cambia estado a BAJA pero MANTIENE el stock físico para auditoría.
+    """
     with SessionLocal() as session:
         inv = session.get(Inventory, inventory_id)
-        if inv and inv.quantity > 0:
-            qty_to_remove = inv.quantity
-            mv = Movement(
-                inventory_id=inv.id, product_id=inv.product_id, 
-                change_quantity=-qty_to_remove, movement_type="OUT", 
-                reference="BAJA MANUAL", notes=f"Baja: {reason}"
-            )
-            session.add(mv)
-            inv.quantity = 0
+        if inv:
+            # NO ponemos quantity en 0. Se mantiene la existencia.
             inv.status = "BAJA"
+            
             # Guardamos la justificación en las observaciones
             current_obs = inv.obs or ""
-            inv.obs = f"{current_obs} | [BAJA: {reason}]".strip()
-            session.commit()
-        elif inv:
-            inv.status = "BAJA"
-            current_obs = inv.obs or ""
-            inv.obs = f"{current_obs} | [BAJA: {reason}]".strip()
+            # Añadimos timestamp para saber cuándo se dio de baja
+            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
+            inv.obs = f"{current_obs} | [BAJA {timestamp}: {reason}]".strip()
+            
             session.commit()
 
 # --- CAMBIO: PERMITIR CAMBIAR STATUS ---

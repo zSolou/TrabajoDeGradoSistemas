@@ -1,6 +1,6 @@
 import os
 from PySide6 import QtCore, QtWidgets, QtGui
-from core import repo, theme
+from core import repo, theme, utils # Importamos utils para PDF
 from datetime import datetime
 
 FACTORES_CONVERSION = {
@@ -20,7 +20,6 @@ class EditarProductoDialog(QtWidgets.QDialog):
     def _build_ui(self):
         layout = QtWidgets.QVBoxLayout(self)
         
-        # --- MENSAJE DE SEGURIDAD ---
         info_lbl = QtWidgets.QLabel("🔒 MODO LECTURA - SOLO OBSERVACIONES EDITABLES")
         info_lbl.setStyleSheet("color: #ffa500; font-weight: bold; padding: 5px; border-bottom: 1px solid #ffa500;")
         info_lbl.setAlignment(QtCore.Qt.AlignCenter)
@@ -30,7 +29,6 @@ class EditarProductoDialog(QtWidgets.QDialog):
         scroll.setStyleSheet("background-color: transparent; border: none;")
         content = QtWidgets.QWidget(); form = QtWidgets.QFormLayout(content); form.setSpacing(12)
         
-        # --- CAMPOS BLOQUEADOS (READ ONLY) ---
         self.inp_lote = QtWidgets.QLineEdit(self.data.get('nro_lote', ''))
         self.inp_lote.setReadOnly(True)
         self.inp_lote.setStyleSheet(f"background-color: {theme.BG_INPUT}; border: 1px solid {theme.BORDER_COLOR}; color: #888; padding: 4px;")
@@ -52,7 +50,6 @@ class EditarProductoDialog(QtWidgets.QDialog):
         self.inp_calidad.setReadOnly(True)
         self.inp_calidad.setStyleSheet(f"background-color: {theme.BG_INPUT}; color: #888; padding: 4px;")
 
-        # --- OBSERVACIONES (EDITABLE) ---
         self.inp_obs = QtWidgets.QPlainTextEdit(str(self.data.get('obs') or "")); self.inp_obs.setFixedHeight(80)
         self.inp_obs.setStyleSheet(f"background-color: {theme.BG_INPUT}; color: white; border: 1px solid {theme.ACCENT_COLOR};")
 
@@ -63,7 +60,6 @@ class EditarProductoDialog(QtWidgets.QDialog):
 
         scroll.setWidget(content); layout.addWidget(scroll)
 
-        # --- SECCIÓN RECUPERAR BAJA ---
         if self.data.get('status') == 'BAJA':
             rec_frame = QtWidgets.QFrame()
             rec_frame.setStyleSheet("background-color: #3a1c1c; border-radius: 6px; padding: 10px; margin-top: 10px;")
@@ -81,7 +77,6 @@ class EditarProductoDialog(QtWidgets.QDialog):
             rl.addWidget(lbl_baja); rl.addWidget(self.btn_rec)
             layout.addWidget(rec_frame)
 
-        # Botones Acción
         btn_box = QtWidgets.QHBoxLayout()
         btn_save = QtWidgets.QPushButton("Guardar Cambios"); btn_save.clicked.connect(self.accept)
         btn_save.setStyleSheet(f"background-color: {theme.BTN_PRIMARY}; color: white; font-weight: bold; padding: 8px;")
@@ -101,7 +96,7 @@ class EditarProductoDialog(QtWidgets.QDialog):
         return sb
 
     def _activar_recuperacion(self):
-        self.recover_status = "AGOTADO" # Vuelve como activo pero con stock 0
+        self.recover_status = "AGOTADO"
         self.btn_rec.setText("✅ SE RECUPERARÁ AL GUARDAR")
         self.btn_rec.setEnabled(False)
         self.inp_obs.appendPlainText(" [RECUPERADO DE BAJA]")
@@ -176,19 +171,27 @@ class InventarioScreen(QtWidgets.QWidget):
         btn_del = QtWidgets.QPushButton("📉 Dar de Baja"); btn_del.clicked.connect(self._dar_baja_producto)
         btn_xls = QtWidgets.QPushButton("📊 Excel"); btn_xls.clicked.connect(lambda: self._exportar_excel("existencias"))
         
+        # --- BOTÓN PDF ---
+        btn_pdf = QtWidgets.QPushButton("📄 PDF")
+        btn_pdf.clicked.connect(lambda: utils.exportar_tabla_pdf(self, self.table_exist, "REPORTE DE EXISTENCIAS", "inventario"))
+        # -----------------
+
         self._estilizar_boton(btn_edit, theme.BTN_PRIMARY)
         self._estilizar_boton(btn_del, theme.BTN_DANGER)
         self._estilizar_boton(btn_xls, "#217346")
+        self._estilizar_boton(btn_pdf, "#d32f2f") # Rojo para PDF
         
         top_bar.addWidget(self.search_exist)
         top_bar.addWidget(self.chk_show_exhausted)
         top_bar.addWidget(btn_edit)
         top_bar.addWidget(btn_del)
         top_bar.addWidget(btn_xls)
+        top_bar.addWidget(btn_pdf)
         layout.addLayout(top_bar)
 
         self.table_exist = QtWidgets.QTableWidget()
-        cols = ["ID", "SKU", "LOTE", "Producto", "Existencia", "Bultos", "F. Prod", "Estado", "Largo", "Ancho", "Espesor", "Calidad", "Secado", "Cepillado", "Impregnado", "Obs"]
+        # --- SIN COLUMNA ID ---
+        cols = ["SKU", "LOTE", "Producto", "Existencia", "Bultos", "F. Prod", "Estado", "Largo", "Ancho", "Espesor", "Calidad", "Secado", "Cepillado", "Impregnado", "Obs"]
         self.table_exist.setColumnCount(len(cols))
         self.table_exist.setHorizontalHeaderLabels(cols)
         self._estilizar_tabla(self.table_exist)
@@ -205,16 +208,24 @@ class InventarioScreen(QtWidgets.QWidget):
         btn_refresh = QtWidgets.QPushButton("🔄 Actualizar"); btn_refresh.clicked.connect(self.refresh)
         btn_xls = QtWidgets.QPushButton("📊 Excel Historial"); btn_xls.clicked.connect(lambda: self._exportar_excel("historial"))
         
+        # --- BOTÓN PDF ---
+        btn_pdf = QtWidgets.QPushButton("📄 PDF")
+        btn_pdf.clicked.connect(lambda: utils.exportar_tabla_pdf(self, self.table_hist, "HISTORIAL DE DESPACHOS", "historial"))
+        # -----------------
+
         self._estilizar_boton(btn_refresh, theme.BTN_PRIMARY)
         self._estilizar_boton(btn_xls, "#217346")
+        self._estilizar_boton(btn_pdf, "#d32f2f")
 
         top_bar.addWidget(self.search_hist)
         top_bar.addWidget(btn_refresh)
         top_bar.addWidget(btn_xls)
+        top_bar.addWidget(btn_pdf)
         layout.addLayout(top_bar)
 
         self.table_hist = QtWidgets.QTableWidget()
-        cols = ["ID", "Fecha", "Guía", "Cliente", "Producto", "Lote", "SKU", "Cant. Salida", "Bultos Salida", "Obs"]
+        # --- SIN COLUMNA ID ---
+        cols = ["Fecha", "Guía", "Cliente", "Producto", "Lote", "SKU", "Cant. Salida", "Bultos Salida", "Obs"]
         self.table_hist.setColumnCount(len(cols))
         self.table_hist.setHorizontalHeaderLabels(cols)
         self._estilizar_tabla(self.table_hist)
@@ -254,10 +265,19 @@ class InventarioScreen(QtWidgets.QWidget):
             status = r.get("status")
             if qty == 0 and status != "BAJA": status = "AGOTADO"
 
-            vals = [str(r.get("id")), r.get("sku"), r.get("nro_lote"), tipo, f"{qty:.0f}", f"{bultos}", str(r.get("prod_date")), status, str(r.get("largo")), str(r.get("ancho")), str(r.get("espesor")), r.get("quality"), r.get("drying"), r.get("planing"), r.get("impregnated"), r.get("obs")]
+            # --- SIN ID EN VALS (Se guarda en UserRole) ---
+            vals = [
+                r.get("sku"), r.get("nro_lote"), tipo, 
+                f"{qty:.0f}", f"{bultos}", str(r.get("prod_date")), status, 
+                str(r.get("largo")), str(r.get("ancho")), str(r.get("espesor")), 
+                r.get("quality"), r.get("drying"), r.get("planing"), r.get("impregnated"), r.get("obs")
+            ]
+            
             for i, v in enumerate(vals):
                 it = QtWidgets.QTableWidgetItem(str(v or ""))
+                # Guardamos la data completa (con ID) en la primera columna visible (SKU)
                 if i==0: it.setData(QtCore.Qt.UserRole, r)
+                
                 if status == "BAJA": it.setForeground(QtGui.QColor("#ff6b6b"))
                 elif qty == 0: it.setForeground(QtGui.QColor("gray"))
                 self.table_exist.setItem(row, i, it)
@@ -268,7 +288,13 @@ class InventarioScreen(QtWidgets.QWidget):
             row = self.table_hist.rowCount(); self.table_hist.insertRow(row)
             tipo = str(r.get("type", "")); qty = float(r.get("quantity", 0))
             factor = FACTORES_CONVERSION.get(tipo, 1); bultos = int(qty / factor) if factor else 0
-            vals = [str(r.get("id")), str(r.get("date")), r.get("guide"), r.get("client"), r.get("product"), r.get("lote"), r.get("sku"), f"{qty:.0f}", f"{bultos}", r.get("obs")]
+            
+            # --- SIN ID ---
+            vals = [
+                str(r.get("date")), r.get("guide"), r.get("client"), 
+                r.get("product"), r.get("lote"), r.get("sku"), 
+                f"{qty:.0f}", f"{bultos}", r.get("obs")
+            ]
             for i, v in enumerate(vals):
                 self.table_hist.setItem(row, i, QtWidgets.QTableWidgetItem(str(v or "")))
 
@@ -285,9 +311,9 @@ class InventarioScreen(QtWidgets.QWidget):
     def _get_selected_existencia(self):
         row = self.table_exist.currentRow()
         if row < 0: return None
+        # Data guardada en columna 0 (SKU)
         return self.table_exist.item(row, 0).data(QtCore.Qt.UserRole)
 
-    # --- CAMBIO: AÑADIDA JUSTIFICACIÓN DE BAJA ---
     def _dar_baja_producto(self):
         data = self._get_selected_existencia()
         if not data: return
@@ -296,15 +322,12 @@ class InventarioScreen(QtWidgets.QWidget):
              QtWidgets.QMessageBox.warning(self, "Aviso", "Este producto ya está dado de BAJA.")
              return
         
-        if float(data['quantity']) == 0:
-            QtWidgets.QMessageBox.information(self, "Info", "Este producto ya está agotado.")
-            return
-
-        # Input Dialog para la razón
+        # Input Dialog para la razón (Stock no se pone en 0, solo cambia estatus)
         reason, ok = QtWidgets.QInputDialog.getText(
             self, "Justificación de Baja", 
-            f"Está a punto de dar de baja el Lote {data['nro_lote']}.\n\n"
-            "Por favor, ingrese el motivo (Obligatorio):",
+            f"Dar de baja Lote {data['nro_lote']}.\n\n"
+            "El stock se mantendrá para auditoría, pero no estará disponible para despacho.\n"
+            "Ingrese motivo (Obligatorio):",
             QtWidgets.QLineEdit.Normal
         )
 

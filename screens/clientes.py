@@ -1,5 +1,5 @@
 from PySide6 import QtCore, QtWidgets, QtGui
-from core import repo, theme
+from core import repo, theme, utils # Importamos utils para el PDF
 import re
 import os
 from datetime import datetime
@@ -208,6 +208,7 @@ class ClienteDialog(QtWidgets.QDialog):
 class ClientesScreen(QtWidgets.QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.all_clients = [] # Almacenamiento local para filtrado
         self._setup_ui()
         self.refresh()
 
@@ -216,13 +217,20 @@ class ClientesScreen(QtWidgets.QWidget):
         layout.setContentsMargins(20, 20, 20, 20)
         layout.setSpacing(15)
 
-        # --- Encabezado ---
+        # --- Encabezado con Buscador ---
         header = QtWidgets.QHBoxLayout()
         lbl = QtWidgets.QLabel("GESTIÓN DE CLIENTES")
         lbl.setStyleSheet(f"font-size: 18pt; font-weight: bold; color: {theme.ACCENT_COLOR};")
         header.addWidget(lbl)
         header.addStretch()
         
+        # BUSCADOR
+        self.search_input = QtWidgets.QLineEdit()
+        self.search_input.setPlaceholderText("🔍 Buscar por Nombre, RIF o Teléfono...")
+        self.search_input.setStyleSheet(f"background-color: {theme.BG_INPUT}; padding: 6px; border-radius: 4px; color: white; min-width: 250px;")
+        self.search_input.textChanged.connect(self._filtrar_clientes)
+        header.addWidget(self.search_input)
+
         self.chk_ver_inactivos = QtWidgets.QCheckBox("Ver Desactivados")
         self.chk_ver_inactivos.setStyleSheet(f"color: {theme.TEXT_SECONDARY}; font-weight: bold;")
         self.chk_ver_inactivos.stateChanged.connect(self.refresh)
@@ -249,22 +257,30 @@ class ClientesScreen(QtWidgets.QWidget):
         self.btn_toggle.setCursor(QtCore.Qt.PointingHandCursor)
         self.btn_toggle.clicked.connect(self._toggle_activo)
         
-        # --- NUEVO BOTÓN: EXPORTAR ---
-        btn_xls = QtWidgets.QPushButton("📊 Exportar Excel")
+        # Botones Exportar
+        btn_xls = QtWidgets.QPushButton("📊 Excel")
         btn_xls.setCursor(QtCore.Qt.PointingHandCursor)
         btn_xls.setStyleSheet("background-color: #217346; color: white; border-radius: 4px; padding: 6px 12px; font-weight: bold;")
         btn_xls.clicked.connect(self._exportar_excel)
-        # -----------------------------
+
+        # --- BOTÓN PDF ---
+        btn_pdf = QtWidgets.QPushButton("📄 PDF")
+        btn_pdf.setCursor(QtCore.Qt.PointingHandCursor)
+        btn_pdf.setStyleSheet("background-color: #d32f2f; color: white; border-radius: 4px; padding: 6px 12px; font-weight: bold;")
+        btn_pdf.clicked.connect(lambda: utils.exportar_tabla_pdf(self, self.table, "CARTERA DE CLIENTES", "clientes"))
+        # -----------------
 
         actions_layout.addWidget(btn_edit)
         actions_layout.addWidget(self.btn_toggle)
-        actions_layout.addWidget(btn_xls) # Añadido al layout
+        actions_layout.addWidget(btn_xls)
+        actions_layout.addWidget(btn_pdf) # Añadido
         actions_layout.addStretch()
         layout.addLayout(actions_layout)
 
         # --- Tabla ---
         self.table = QtWidgets.QTableWidget()
-        columns = ["ID", "Nombre", "Documento", "Teléfono", "Email", "Estado"]
+        # --- SIN COLUMNA ID ---
+        columns = ["Nombre / Razón Social", "Documento", "Teléfono", "Email", "Estado"]
         self.table.setColumnCount(len(columns))
         self.table.setHorizontalHeaderLabels(columns)
         self.table.setStyleSheet(f"""
@@ -282,27 +298,44 @@ class ClientesScreen(QtWidgets.QWidget):
         self._update_buttons()
 
     def refresh(self):
-        self.table.setRowCount(0)
         ver_todos = self.chk_ver_inactivos.isChecked()
         try:
-            clientes = repo.list_clients(solo_activos=not ver_todos)
-            
-            for c in clientes:
-                r = self.table.rowCount()
-                self.table.insertRow(r)
-                
-                is_active = getattr(c, "is_active", True)
-                estado_str = "ACTIVO" if is_active else "INACTIVO"
-                
-                items = [str(c.id), c.name, c.document_id, c.phone or "", c.email or "", estado_str]
-                
-                for i, val in enumerate(items):
-                    it = QtWidgets.QTableWidgetItem(val)
-                    if not is_active: it.setForeground(QtGui.QColor("#ff6b6b")) 
-                    if i == 0: it.setData(QtCore.Qt.UserRole, c)
-                    self.table.setItem(r, i, it)
-                    
+            self.all_clients = repo.list_clients(solo_activos=not ver_todos)
+            self._filtrar_clientes(self.search_input.text()) # Usar filtro actual
         except Exception as e: print(f"Error clientes: {e}")
+
+    def _filtrar_clientes(self, text):
+        t = text.lower()
+        if not t:
+            self._llenar_tabla(self.all_clients)
+            return
+            
+        filtrados = [
+            c for c in self.all_clients 
+            if t in c.name.lower() or t in c.document_id.lower() or t in (c.phone or "").lower()
+        ]
+        self._llenar_tabla(filtrados)
+
+    def _llenar_tabla(self, lista_clientes):
+        self.table.setRowCount(0)
+        for c in lista_clientes:
+            r = self.table.rowCount()
+            self.table.insertRow(r)
+            
+            is_active = getattr(c, "is_active", True)
+            estado_str = "ACTIVO" if is_active else "INACTIVO"
+            
+            # --- SIN ID (Solo columnas útiles) ---
+            items = [c.name, c.document_id, c.phone or "", c.email or "", estado_str]
+            
+            for i, val in enumerate(items):
+                it = QtWidgets.QTableWidgetItem(val)
+                if not is_active: it.setForeground(QtGui.QColor("#ff6b6b")) 
+                
+                # Guardamos la data en la primera columna visible (Nombre)
+                if i == 0: it.setData(QtCore.Qt.UserRole, c)
+                
+                self.table.setItem(r, i, it)
 
     def _get_selected_client(self):
         row = self.table.currentRow()
@@ -362,7 +395,6 @@ class ClientesScreen(QtWidgets.QWidget):
                 self.refresh(); self._update_buttons()
             except Exception as e: QtWidgets.QMessageBox.critical(self, "Error", str(e))
 
-    # --- FUNCIÓN DE EXPORTACIÓN ---
     def _exportar_excel(self):
         try:
             import openpyxl
@@ -378,43 +410,33 @@ class ClientesScreen(QtWidgets.QWidget):
 
         try:
             wb = openpyxl.Workbook(); ws = wb.active; ws.title = "Cartera Clientes"
-            
-            # Estilos
             header_fill = PatternFill(start_color="1b1b26", end_color="1b1b26", fill_type="solid")
             header_font = Font(name="Arial", size=10, bold=True, color="FFFFFF")
             row_font = Font(name="Arial", size=10)
             thin_border = Border(left=Side(style='thin'), right=Side(style='thin'), top=Side(style='thin'), bottom=Side(style='thin'))
 
-            # Logo
             if os.path.exists("logo.png"):
                 try: img = XLImage("logo.png"); img.height = 50; img.width = 50; ws.add_image(img, "A1")
                 except: pass
 
-            # Título
             ws.merge_cells("B2:E2")
             ws["B2"] = "CARTERA DE CLIENTES REGISTRADOS"
             ws["B2"].font = Font(size=14, bold=True)
             ws["B3"] = f"Generado: {datetime.now().strftime('%d/%m/%Y')}"
 
             start_row = 5
-            headers = ["ID", "Nombre / Razón Social", "Documento", "Teléfono", "Email", "Estado"]
+            # --- SIN ID ---
+            headers = ["Nombre / Razón Social", "Documento", "Teléfono", "Email", "Estado"]
             
-            # Escribir Encabezados
             for i, h in enumerate(headers):
                 c = ws.cell(row=start_row, column=i+1, value=h)
                 c.fill = header_fill; c.font = header_font; c.alignment = Alignment(horizontal="center"); c.border = thin_border
                 ws.column_dimensions[get_column_letter(i+1)].width = 25
 
-            # Escribir Filas
             for r in range(self.table.rowCount()):
                 for c in range(len(headers)):
                     it = self.table.item(r, c)
                     val = it.text() if it else ""
-                    # Convertir ID a número
-                    if c == 0: 
-                        try: val = int(val)
-                        except: pass
-                    
                     cell = ws.cell(row=start_row + 1 + r, column=c+1, value=val)
                     cell.font = row_font; cell.border = thin_border
                     cell.alignment = Alignment(horizontal="left")
